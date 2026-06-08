@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Market Insights — MaizeIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<section style="background:linear-gradient(135deg,var(--green-900),var(--green-700));padding:2.5rem 1.5rem;color:#fff;">
+  <div style="max-width:1200px;margin:0 auto;">
+    <h1 style="font-family:var(--font-head);font-size:2rem;font-weight:800;color:var(--gold);">📈 Market Insights</h1>
+    <p style="opacity:0.85;margin-top:0.4rem;">Aggregated trends and county-level analysis across the full dataset</p>
+  </div>
+</section>
+
+<div class="section">
+  <div class="section-inner">
+
+    <!-- TOP/BOTTOM COUNTIES -->
+    <div class="insight-row">
+      <div class="table-wrap">
+        <div class="table-header"><h2>🔴 Highest Avg Prices</h2></div>
+        <table>
+          <thead><tr><th>County</th><th>Avg Wholesale (KSh)</th></tr></thead>
+          <tbody>
+            {% for county, price in top5_high.items() %}
+            <tr>
+              <td><span class="badge badge-red">{{ county }}</span></td>
+              <td><strong>{{ price }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h2>🟢 Lowest Avg Prices</h2></div>
+        <table>
+          <thead><tr><th>County</th><th>Avg Wholesale (KSh)</th></tr></thead>
+          <tbody>
+            {% for county, price in top5_low.items() %}
+            <tr>
+              <td><span class="badge badge-green">{{ county }}</span></td>
+              <td><strong>{{ price }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- NATIONAL MONTHLY TREND -->
+    <div class="chart-box">
+      <h3>📊 National Average Wholesale Price — Monthly Trend</h3>
+      <canvas id="nationalChart"></canvas>
+    </div>
+
+    <!-- COUNTY COMPARISON BAR CHART -->
+    <div class="chart-box">
+      <h3>🗺 Average Price by County (All Time)</h3>
+      <canvas id="countyChart" style="max-height:450px;"></canvas>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// National monthly trend
+const monthlyData = {{ monthly | tojson }};
+const labels = Object.keys(monthlyData);
+const values = Object.values(monthlyData);
+
+new Chart(document.getElementById('nationalChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Avg Wholesale Price (KSh)',
+      data: values,
+      borderColor: '#2e8b57',
+      backgroundColor: 'rgba(46,139,87,0.08)',
+      fill: true, tension: 0.4, pointRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { title: { display: true, text: 'KSh per kg' } },
+      x: { ticks: { maxTicksLimit: 12 } }
+    }
+  }
+});
+
+// County comparison
+async function loadCountyChart() {
+  const res  = await fetch('/api/county-comparison');
+  const data = await res.json();
+  const clabels = data.map(d => d.county);
+  const cvals   = data.map(d => d.avg_price);
+  const colors  = cvals.map(v => v > 70 ? '#e53e3e' : v > 55 ? '#f0a500' : '#2e8b57');
+
+  new Chart(document.getElementById('countyChart'), {
+    type: 'bar',
+    data: {
+      labels: clabels,
+      datasets: [{
+        label: 'Avg Wholesale (KSh)',
+        data: cvals,
+        backgroundColor: colors,
+        borderRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { title: { display: true, text: 'KSh per kg' } },
+        x: { ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+loadCountyChart();
+</script>
+{% endblock %}

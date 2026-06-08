@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Trader Dashboard — MaizeIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.trader-hero { background:linear-gradient(135deg,#1a2e5c 0%,#1e40af 60%,#3b82f6 100%); color:#fff; padding:2.5rem 1.5rem; position:relative; overflow:hidden; }
+.trader-hero::after { content:'🏪'; position:absolute; right:2rem; top:50%; transform:translateY(-50%); font-size:5rem; opacity:0.15; }
+.trader-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:1.5rem; }
+.arb-card { background:#fff; border-radius:14px; padding:1.25rem 1.5rem; box-shadow:var(--shadow); border:1px solid var(--gray-200); margin-bottom:1rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+.arb-card .counties { display:flex; align-items:center; gap:0.75rem; font-size:0.875rem; font-weight:600; }
+.arb-card .arrow { color:var(--gray-400); font-size:1.2rem; }
+.arb-card .margin { font-family:var(--font-head); font-size:1.2rem; font-weight:800; }
+.arb-card .margin.good  { color:var(--green-700); }
+.arb-card .margin.med   { color:var(--amber-600); }
+.arb-card .margin.low   { color:var(--gray-400); }
+.price-heatmap { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:0.6rem; }
+.heat-cell { background:#fff; border-radius:10px; padding:0.75rem; text-align:center; box-shadow:var(--shadow); border:1.5px solid var(--gray-200); }
+.heat-cell .c-name { font-size:0.72rem; font-weight:700; color:var(--gray-600); text-transform:uppercase; margin-bottom:0.2rem; }
+.heat-cell .c-price { font-family:var(--font-head); font-weight:800; font-size:1rem; }
+@media(max-width:900px){ .trader-grid{grid-template-columns:1fr;} }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- TRADER HERO -->
+<div class="trader-hero">
+  <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+    <div style="width:52px;height:52px;border-radius:50%;background:#f0a500;color:#1a2e5c;display:flex;align-items:center;justify-content:center;font-family:var(--font-head);font-size:1.4rem;font-weight:800;flex-shrink:0;">
+      {{ user.name[0].upper() }}
+    </div>
+    <div>
+      <div style="font-size:0.75rem;opacity:0.7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:0.2rem;">🏪 Trader Account</div>
+      <h1 style="font-family:var(--font-head);font-size:1.6rem;font-weight:800;color:#f0a500;margin:0;">
+        {{ user.name.split()[0] }}'s Trading Dashboard
+      </h1>
+      <p style="opacity:0.8;margin-top:0.2rem;">
+        {% if user.county %}📍 Based in {{ user.county }} · {% endif %}Arbitrage & price intelligence
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="dash-body">
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="margin-bottom:1.5rem;">
+    <div class="kpi-card" style="border-color:#3b82f6;">
+      <div class="kpi-label">My Predictions</div>
+      <div class="kpi-val">{{ predictions|length }}</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Cheapest County (30d)</div>
+      <div class="kpi-val" style="font-size:1rem;padding-top:0.3rem;" id="cheapestCounty">—</div>
+    </div>
+    <div class="kpi-card" style="border-color:#e53e3e;">
+      <div class="kpi-label">Most Expensive (30d)</div>
+      <div class="kpi-val" style="font-size:1rem;padding-top:0.3rem;" id="dearestCounty">—</div>
+    </div>
+    <div class="kpi-card" style="border-color:#3b82f6;">
+      <div class="kpi-label">Max Arbitrage Margin</div>
+      <div class="kpi-val" style="font-size:1.2rem;" id="arbMargin">—</div>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.75rem;">
+    <a href="{{ url_for('prediction') }}" class="btn-primary">🌽 New Prediction</a>
+    <a href="{{ url_for('compare') }}" class="btn-primary" style="background:var(--amber-600);">⚖ Compare Counties</a>
+    <a href="{{ url_for('historical') }}" class="btn-outline" style="color:var(--green-700);border-color:var(--green-700);">📊 Historical Data</a>
+    <a href="{{ url_for('profile') }}" class="btn-outline" style="color:var(--gray-600);border-color:var(--gray-200);">👤 Profile</a>
+  </div>
+
+  <div class="trader-grid">
+
+    <!-- LEFT -->
+    <div>
+      <!-- ARBITRAGE OPPORTUNITIES -->
+      <div style="margin-bottom:1.5rem;">
+        <div class="section-title" style="font-size:1.1rem;margin-bottom:0.75rem;">💰 Top Arbitrage Opportunities</div>
+        <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:1rem;">
+          Buy cheap → Sell dear. Margin shown is avg price difference over last 30 days.
+          Deduct your transport cost to estimate profit.
+        </p>
+        <div id="arbList"><div class="spinner" style="margin:1.5rem auto;"></div></div>
+      </div>
+
+      <!-- COUNTY PRICE CHART -->
+      <div class="chart-box">
+        <h3>📊 County Price Comparison (Last 30 Days Avg)</h3>
+        <canvas id="traderBarChart"></canvas>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <!-- PRICE HEATMAP -->
+      <div style="background:#fff;border-radius:16px;padding:1.5rem;box-shadow:var(--shadow);border:1px solid var(--gray-200);margin-bottom:1.25rem;">
+        <h3 style="font-family:var(--font-head);font-size:1rem;font-weight:700;color:var(--green-900);margin-bottom:0.75rem;">
+          🗺 Price Map (30-Day Avg)
+        </h3>
+        <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:0.75rem;">
+          <span style="background:#d1fae5;padding:0.1rem 0.4rem;border-radius:4px;color:#065f46;">Green</span> = cheap &nbsp;
+          <span style="background:#fef3c7;padding:0.1rem 0.4rem;border-radius:4px;color:#92400e;">Amber</span> = mid &nbsp;
+          <span style="background:#fee2e2;padding:0.1rem 0.4rem;border-radius:4px;color:#991b1b;">Red</span> = dear
+        </p>
+        <div class="price-heatmap" id="heatmap"></div>
+      </div>
+
+      <!-- MY PREDICTIONS -->
+      <div class="table-wrap">
+        <div class="table-header"><h2>Recent Predictions</h2></div>
+        <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
+          <table>
+            <thead><tr><th>Date</th><th>County</th><th>Price</th></tr></thead>
+            <tbody>
+              {% if predictions %}
+                {% for p in predictions %}
+                <tr>
+                  <td style="font-size:0.8rem;">{{ p['prediction_date'] }}</td>
+                  <td><span class="badge badge-green" style="font-size:0.7rem;">{{ p['county'] }}</span></td>
+                  <td><strong>KSh {{ "%.2f"|format(p['predicted_price']) }}</strong></td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="3" class="empty-state">No predictions yet</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const countyAvg = {{ county_avg | tojson }};
+
+// Sort counties by price
+const sorted = Object.entries(countyAvg).sort((a,b) => a[1]-b[1]);
+const prices  = sorted.map(x=>x[1]);
+const minP    = Math.min(...prices), maxP = Math.max(...prices);
+const range   = maxP - minP;
+
+// KPIs
+document.getElementById('cheapestCounty').textContent = sorted[0][0] + ' · KSh ' + sorted[0][1];
+document.getElementById('dearestCounty').textContent  = sorted[sorted.length-1][0] + ' · KSh ' + sorted[sorted.length-1][1];
+document.getElementById('arbMargin').textContent      = 'KSh ' + (maxP - minP).toFixed(2);
+
+// Heatmap
+const hm = document.getElementById('heatmap');
+sorted.forEach(([county, price]) => {
+  const pct = range > 0 ? (price - minP) / range : 0.5;
+  let bg, tc;
+  if (pct < 0.33)      { bg='#d1fae5'; tc='#065f46'; }
+  else if (pct < 0.66) { bg='#fef3c7'; tc='#92400e'; }
+  else                  { bg='#fee2e2'; tc='#991b1b'; }
+  const cell = document.createElement('div');
+  cell.className = 'heat-cell';
+  cell.style.background = bg;
+  cell.innerHTML = `<div class="c-name">${county}</div><div class="c-price" style="color:${tc}">KSh ${price}</div>`;
+  hm.appendChild(cell);
+});
+
+// Arbitrage opportunities
+const arbList = document.getElementById('arbList');
+const pairs = [];
+for (let i=0; i<sorted.length; i++) {
+  for (let j=sorted.length-1; j>i; j--) {
+    const diff = sorted[j][1] - sorted[i][1];
+    if (diff > 5) pairs.push({ buy:sorted[i][0], sell:sorted[j][0], margin:diff.toFixed(2) });
+  }
+}
+pairs.sort((a,b) => b.margin - a.margin);
+arbList.innerHTML = pairs.slice(0,6).map(p => {
+  const cls = p.margin > 20 ? 'good' : p.margin > 10 ? 'med' : 'low';
+  return `<div class="arb-card">
+    <div class="counties">
+      <span class="badge badge-green">Buy: ${p.buy}</span>
+      <span class="arrow">→</span>
+      <span class="badge badge-red" style="background:#fee2e2;color:#991b1b;">Sell: ${p.sell}</span>
+    </div>
+    <div class="margin ${cls}">+KSh ${p.margin}/kg</div>
+  </div>`;
+}).join('') || '<p style="color:var(--gray-400);font-size:0.875rem;">No significant price differences found in last 30 days.</p>';
+
+// Bar chart
+const barLabels = sorted.map(x=>x[0]);
+const barVals   = sorted.map(x=>x[1]);
+const barColors = barVals.map(v => {
+  const pct = range>0?(v-minP)/range:0.5;
+  return pct<0.33?'#4db87a':pct<0.66?'#f0a500':'#e53e3e';
+});
+new Chart(document.getElementById('traderBarChart'), {
+  type:'bar',
+  data:{ labels:barLabels, datasets:[{ label:'Avg Wholesale (KSh)', data:barVals, backgroundColor:barColors, borderRadius:4 }] },
+  options:{
+    responsive:true, plugins:{legend:{display:false}},
+    scales:{ y:{title:{display:true,text:'KSh/kg'}}, x:{ticks:{font:{size:10}}} }
+  }
+});
+</script>
+{% endblock %}

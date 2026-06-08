@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}About — MaizeIQ{% endblock %}
+
+{% block content %}
+<section class="about-hero">
+  <h1>About MaizeIQ Kenya</h1>
+  <p>Model is combining machine learning, weather data, and market intelligence to empower Kenyan farmers and traders with price forecasting tools.</p>
+</section>
+
+<div class="section" style="background:#fff;">
+  <div class="section-inner">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center;" class="about-grid">
+      <div>
+        <div class="section-title">The Problem</div>
+        <p style="color:var(--gray-600);line-height:1.8;margin-top:0.75rem;">
+          Smallholder farmers in Kenya often sell maize immediately after harvest when prices are lowest, lacking the information to time their sales. Traders face uncertainty buying in surplus regions to sell in deficit areas. Price volatility causes food insecurity and financial loss across the value chain.
+        </p>
+        <p style="color:var(--gray-600);line-height:1.8;margin-top:1rem;">
+          MaizeIQ addresses this by providing <strong>data-driven price forecasts</strong> that help both farmers and traders make better decisions about when and where to buy or sell.
+        </p>
+      </div>
+      <div>
+        <div class="section-title">The Solution</div>
+        <p style="color:var(--gray-600);line-height:1.8;margin-top:0.75rem;">
+          I trained a <strong>Gradient Boosting machine learning model</strong> on 3 years of wholesale maize prices from 45 Kenyan counties, combined with daily weather data (temperature, rainfall). The model achieves an R² of 0.81 — meaning it explains 81% of price variation with an average error under 1 KSh/kg.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODEL METRICS -->
+<div class="section">
+  <div class="section-inner">
+    <div class="section-title">Model Performance</div>
+    <p class="section-sub">Evaluated on a time-based 80/20 train-test split (trained on 2023–2025, tested on 2025–2026)</p>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">R² Score</div>
+        <div class="kpi-val">0.811</div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:0.2rem;">81% variance explained</div>
+      </div>
+      <div class="kpi-card amber">
+        <div class="kpi-label">RMSE</div>
+        <div class="kpi-val">7.42</div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:0.2rem;">KSh per kg</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-label">MAE</div>
+        <div class="kpi-val">0.76</div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:0.2rem;">KSh avg error</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Training Records</div>
+        <div class="kpi-val">4,215</div>
+        <div style="font-size:0.8rem;color:var(--gray-400);margin-top:0.2rem;">After cleaning</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DATA SOURCES -->
+<div class="section" style="background:#fff;">
+  <div class="section-inner">
+    <div class="section-title">Data Sources</div>
+    <p class="section-sub">Built on publicly available Kenyan agricultural and meteorological data</p>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🏛</div>
+        <h3>Maize Price Data</h3>
+        <p>Historical wholesale and retail prices from markets across 45 Kenyan counties — 2023 to 2026. Sourced from Kenya market monitoring systems.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌦</div>
+        <h3>Weather Data</h3>
+        <p>Daily temperature and rainfall data from Open-Meteo — a free, open-source weather API with historical records going back decades.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🗓</div>
+        <h3>Seasonal Features</h3>
+        <p>Kenya's agricultural calendar — long rains (Mar–May), short rains (Oct–Dec) — encoded as features to capture seasonal price patterns.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TECH STACK -->
+<div class="section">
+  <div class="section-inner">
+    <div class="section-title">Technology Stack</div>
+    <p class="section-sub">Built with open-source tools, deployable on a basic server</p>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🐍</div>
+        <h3>Python + scikit-learn</h3>
+        <p>Gradient Boosting Regressor for price prediction. XGBoost compatible. Trained with cross-validation and feature importance analysis.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">⚗</div>
+        <h3>Flask</h3>
+        <p>Lightweight Python web framework serving the REST API and HTML pages. Easy to deploy on any Linux server or cloud platform.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🗄</div>
+        <h3>SQLite</h3>
+        <p>Embedded database storing user accounts, roles, and prediction history. No separate database server required.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎨</div>
+        <h3>HTML / CSS / JS</h3>
+        <p>Vanilla frontend with no heavy frameworks. Chart.js for data visualisation. Fast, accessible, and mobile-friendly.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+@media(max-width:768px){ .about-grid{ grid-template-columns:1fr !important; } }
+</style>
+{% endblock %}

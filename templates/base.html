@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}MaizeIQ Kenya{% endblock %}</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}"/>
+{% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- FIXED NAVBAR -->
+<nav class="navbar" id="navbar">
+  <div class="nav-inner">
+    <a href="{{ url_for('home') }}" class="nav-logo">
+      <span class="logo-icon"></span>
+      <span class="logo-text">MaizeIQ</span>
+    </a>
+
+    <div class="nav-links" id="navLinks">
+      <a href="{{ url_for('home') }}"       class="nav-link {% if request.endpoint=='home' %}active{% endif %}">Home</a>
+      <a href="{{ url_for('prediction') }}" class="nav-link {% if request.endpoint=='prediction' %}active{% endif %}">Prediction</a>
+      <a href="{{ url_for('historical') }}" class="nav-link {% if request.endpoint=='historical' %}active{% endif %}">Historical Data</a>
+      <a href="{{ url_for('about') }}"      class="nav-link {% if request.endpoint=='about' %}active{% endif %}">About</a>
+    </div>
+
+    <div class="nav-actions" id="navActions">
+      {% if session.get('user') %}
+        <div class="nav-user-menu">
+          <button class="nav-user-btn" onclick="toggleUserMenu(event)">
+            <span class="nav-avatar">{{ session['user']['name'][0].upper() }}</span>
+            <span class="nav-uname">{{ session['user']['name'].split()[0] }}</span>
+            <span style="font-size:0.7rem;opacity:0.7;">▾</span>
+          </button>
+          <div class="user-dropdown" id="userDropdown">
+            <a href="{{ url_for('dashboard') }}" class="drop-item">
+              {% if session['user']['role']=='admin' %}⚙ Admin Dashboard{% else %}📊 My Dashboard{% endif %}
+            </a>
+            {% if session['user']['role']=='admin' %}
+            <a href="{{ url_for('insights') }}" class="drop-item">📈 Insights</a>
+            
+            {% endif %}
+            <a href="{{ url_for('profile') }}" class="drop-item">👤 Profile</a>
+            <div class="drop-divider"></div>
+            <a href="{{ url_for('logout') }}" class="drop-item drop-logout">Logout</a>
+          </div>
+        </div>
+      {% else %}
+        <a href="{{ url_for('login') }}"    class="btn-nav-login">Login</a>
+        <a href="{{ url_for('register') }}" class="btn-nav-reg">Register</a>
+      {% endif %}
+    </div>
+
+    <button class="hamburger" id="hamburger" onclick="toggleMenu()">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<main class="page-content">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="flash flash-{{cat}}">{{msg}}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <span class="footer-brand">🌽 MaizeIQ Kenya</span>
+    <span class="footer-copy">© 2024 · Built for Kenyan Farmers &amp; Traders</span>
+  </div>
+</footer>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

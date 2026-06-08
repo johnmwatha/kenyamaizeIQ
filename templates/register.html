@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Create Account — MaizeIQ{% endblock %}
+
+{% block head %}
+<style>
+
+.pw-toggle { position:relative; }
+.pw-toggle input { padding-right:2.5rem; }
+.pw-eye { position:absolute; right:0.75rem; top:50%; transform:translateY(-50%); cursor:pointer; font-size:1rem; color:var(--gray-400); background:none; border:none; padding:0; }
+.strength-bar { height:4px; border-radius:2px; margin-top:0.4rem; transition:all 0.3s; }
+.phone-hint { font-size:0.75rem; color:var(--gray-400); margin-top:0.3rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-page" style="align-items:flex-start;padding-top:2rem;">
+  <div class="auth-box" style="max-width:500px;">
+    <div style="text-align:center;margin-bottom:1.5rem;">
+      <div style="font-size:2.5rem;">🌽</div>
+      <h2 style="margin-top:0.4rem;">Join MaizeIQ Kenya</h2>
+      <p>Create your account to get price predictions and market insights</p>
+    </div>
+
+    {% if error %}
+    <div class="flash flash-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('register') }}" id="regForm">
+
+      <!-- ROLE SELECTION DROPDOWN -->
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label>I am a *</label>
+        <select name="role" id="roleSelect" onchange="onRoleChange(this.value)" required>
+          <option value="">-- Select your role --</option>
+          <option value="farmer">🧑‍🌾 Farmer — I grow maize and want to know when to sell</option>
+          <option value="trader">🏪 Trader — I buy and sell maize across counties</option>
+          <option value="admin">⚙ Admin — System administrator</option>
+        </select>
+        <div id="roleDesc" style="margin-top:0.5rem;font-size:0.8rem;padding:0.6rem 0.85rem;border-radius:8px;display:none;"></div>
+      </div>
+
+      <!-- ADMIN CODE (hidden unless admin selected) -->
+      <div class="form-group" id="adminCodeGroup" style="display:none;margin-bottom:1rem;">
+        <label>Admin Access Code *</label>
+        <input type="password" name="admin_code" id="adminCode" placeholder="Enter admin access code"/>
+        <div class="phone-hint">Contact the system owner for the admin access code</div>
+      </div>
+
+      <!-- PERSONAL DETAILS -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label>Full Name *</label>
+        <input type="text" name="name" placeholder="John Kamau" required/>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label>Email Address *</label>
+        <input type="email" name="email" placeholder="you@example.com" required/>
+      </div>
+
+      <!-- PHONE -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label>Phone Number * <span style="color:var(--green-700);font-size:0.72rem;">(OTP will be sent here)</span></label>
+        <input type="tel" name="phone" id="phoneInput" placeholder="+254712345678" required
+               oninput="formatPhone(this)"/>
+        <div class="phone-hint">📱 Include country code · e.g. +254 for Kenya, +255 Tanzania</div>
+      </div>
+
+      <!-- COUNTY -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label>County</label>
+        <select name="county">
+          <option value="">-- Select your county --</option>
+          {% for c in counties %}
+          <option value="{{c}}">{{c}}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- PASSWORD -->
+      <div class="form-group pw-toggle" style="margin-bottom:0.4rem;">
+        <label>Password * <span style="font-size:0.72rem;color:var(--gray-400);">(min 6 characters)</span></label>
+        <input type="password" name="password" id="pwInput" placeholder="Create a strong password"
+               minlength="6" required oninput="checkStrength(this.value)"/>
+        <button type="button" class="pw-eye" onclick="togglePw()">👁</button>
+      </div>
+      <div class="strength-bar" id="strengthBar" style="background:var(--gray-200);"></div>
+      <div id="strengthLabel" style="font-size:0.73rem;color:var(--gray-400);margin-bottom:1rem;margin-top:0.25rem;"></div>
+
+      <button type="submit" class="btn-primary" style="width:100%;margin-top:0.5rem;" id="submitBtn">
+        Create Account & Send OTP
+      </button>
+    </form>
+
+    <div class="auth-link">Already have an account? <a href="{{ url_for('login') }}">Login</a></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ADMIN_CODE = "maizeiq2024admin";
+
+const roleDescs = {
+  farmer: { bg:'var(--green-50)', color:'var(--green-800)', text:'🧑‍🌾 You will get price forecasts and seasonal sell-timing advice tailored for farmers.' },
+  trader: { bg:'#eff6ff',         color:'#1e40af',          text:'🏪 You will get arbitrage opportunities, county price comparisons, and market intelligence.' },
+  admin:  { bg:'var(--amber-100)',color:'var(--amber-600)',  text:'⚙ Full system access including user management, SMS broadcast, and market insights.' },
+};
+
+function onRoleChange(role) {
+  const desc  = document.getElementById('roleDesc');
+  const admin = document.getElementById('adminCodeGroup');
+  if (roleDescs[role]) {
+    const d = roleDescs[role];
+    desc.style.display     = 'block';
+    desc.style.background  = d.bg;
+    desc.style.color       = d.color;
+    desc.textContent       = d.text;
+  } else {
+    desc.style.display = 'none';
+  }
+  admin.style.display = role === 'admin' ? 'block' : 'none';
+}
+
+function formatPhone(input) {
+  let v = input.value.replace(/[^\d+]/g,'');
+  if (v && !v.startsWith('+')) v = '+254' + v;
+  input.value = v;
+}
+
+function togglePw() {
+  const inp = document.getElementById('pwInput');
+  inp.type  = inp.type === 'password' ? 'text' : 'password';
+}
+
+function checkStrength(pw) {
+  const bar = document.getElementById('strengthBar');
+  const lbl = document.getElementById('strengthLabel');
+  if (!pw) { bar.style.background='var(--gray-200)'; bar.style.width='100%'; lbl.textContent=''; return; }
+  let score = 0;
+  if (pw.length >= 6)  score++;
+  if (pw.length >= 10) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const levels = [
+    {pct:'20%', color:'#e53e3e', lbl:'Very weak'},
+    {pct:'40%', color:'#f0a500', lbl:'Weak'},
+    {pct:'60%', color:'#ecc94b', lbl:'Fair'},
+    {pct:'80%', color:'#4db87a', lbl:'Strong'},
+    {pct:'100%',color:'#2e8b57', lbl:'Very strong'},
+  ];
+  const lv = levels[score-1] || levels[0];
+  bar.style.background = lv.color;
+  bar.style.width = lv.pct;
+  lbl.textContent = lv.lbl;
+  lbl.style.color = lv.color;
+}
+
+document.getElementById('regForm').addEventListener('submit', function(e) {
+  const role = document.getElementById('roleSelect').value;
+  if (!role) { e.preventDefault(); alert('Please select your role'); return; }
+  if (role === 'admin') {
+    const code = document.getElementById('adminCode').value;
+    if (code !== ADMIN_CODE) {
+      e.preventDefault();
+      alert('Incorrect admin access code. Please contact the system owner.');
+      return;
+    }
+  }
+  document.getElementById('submitBtn').textContent = 'Sending OTP...';
+  document.getElementById('submitBtn').disabled = true;
+});
+</script>
+{% endblock %}

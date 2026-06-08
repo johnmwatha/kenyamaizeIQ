@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}MaizeIQ Kenya — Maize Price Prediction{% endblock %}
+
+{% block content %}
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <h1>Predict <span>Maize Prices</span><br>Make Better Decisions</h1>
+    <p>AI-powered price forecasting using historical market data and weather patterns — built for Kenyan farmers and traders across 31 counties.</p>
+    <div class="hero-btns">
+      <a href="{{ url_for('prediction') }}" class="btn-primary"> Get a Prediction</a>
+      <a href="{{ url_for('historical') }}" class="btn-outline">📊 View Historical Data</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATS BAR -->
+
+
+<!-- HOW IT WORKS -->
+<section class="section" style="background:#fff;">
+  <div class="section-inner">
+    <div class="section-title">How It Works</div>
+    <p class="section-sub">Three simple steps to get an accurate maize price forecast for your county</p>
+    <div class="cards-grid">
+      <div class="card fade-in" data-delay="0s">
+        <div class="card-icon">📍</div>
+        <h3>Select Your County</h3>
+        <p>Choose from 31 counties across Kenya. The model is trained on local market data specific to each region.</p>
+      </div>
+      <div class="card fade-in" data-delay="0.1s">
+        <div class="card-icon">🌦</div>
+        <h3>Enter Weather & Supply</h3>
+        <p>Input current temperature, rainfall, and estimated supply volume to improve prediction accuracy.</p>
+      </div>
+      <div class="card fade-in" data-delay="0.2s">
+        <div class="card-icon">📈</div>
+        <h3>Get Your Forecast</h3>
+        <p>Receive a predicted wholesale price in KSh/kg with a confidence range — instantly, powered by machine learning.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY USE MAIZEIQ -->
+<section class="section">
+  <div class="section-inner">
+    <div class="section-title">Why MaizeIQ?</div>
+    <p class="section-sub">Built on real Kenyan market data combined with weather intelligence</p>
+    <div class="cards-grid">
+      <div class="card fade-in">
+        <div class="card-icon">🤖</div>
+        <h3>Machine Learning</h3>
+        <p>Gradient Boosting model trained on 4,215 records achieving R² of 0.81 — one of the strongest results for agricultural price prediction.</p>
+      </div>
+      <div class="card fade-in">
+        <div class="card-icon">🌧</div>
+        <h3>Weather-Aware</h3>
+        <p>Integrates rainfall and temperature data — rainfall during growing season directly affects supply and thus price movements.</p>
+      </div>
+      <div class="card fade-in">
+        <div class="card-icon">🗺</div>
+        <h3>County-Level</h3>
+        <p>Prices vary greatly between Trans-Nzoia and Mombasa. Our model accounts for regional market dynamics and supply chains.</p>
+      </div>
+      <div class="card fade-in">
+        <div class="card-icon">⬇</div>
+        <h3>Download Data</h3>
+        <p>Export historical price data filtered by county and year as a CSV file — useful for your own analysis and planning.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="section" style="background: linear-gradient(135deg, var(--green-900), var(--green-700)); color:#fff; text-align:center;">
+  <div class="section-inner">
+    <h2 style="font-family:var(--font-head);font-size:2rem;font-weight:800;color:var(--gold);margin-bottom:1rem;">
+      Ready to make smarter decisions?
+    </h2>
+    <p style="opacity:0.85;max-width:500px;margin:0 auto 2rem;line-height:1.7;">
+      Join farmers and traders using data-driven insights to plan their maize buying and selling strategies.
+    </p>
+    <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+      <a href="{{ url_for('register') }}" class="btn-primary">Create Free Account</a>
+      <a href="{{ url_for('prediction') }}" class="btn-outline">Try Prediction</a>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

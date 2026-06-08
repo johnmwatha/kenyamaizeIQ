@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}My Profile — MaizeIQ{% endblock %}
+
+{% block content %}
+<section style="background:linear-gradient(135deg,var(--green-900),var(--green-700));padding:2.5rem 1.5rem;color:#fff;">
+  <div style="max-width:900px;margin:0 auto;display:flex;align-items:center;gap:1.5rem;">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--gold);color:var(--green-900);display:flex;align-items:center;justify-content:center;font-family:var(--font-head);font-size:1.8rem;font-weight:800;flex-shrink:0;">
+      {{ user.name[0].upper() }}
+    </div>
+    <div>
+      <h1 style="font-family:var(--font-head);font-size:1.8rem;font-weight:800;color:var(--gold);">{{ user.name }}</h1>
+      <p style="opacity:0.8;margin-top:0.2rem;">{{ user.email }} · <span class="badge {% if user.role=='admin' %}badge-amber{% else %}badge-green{% endif %}">{{ user.role }}</span></p>
+    </div>
+  </div>
+</section>
+
+<div class="section">
+  <div class="section-inner" style="max-width:700px;">
+
+    {% if msg %}
+    <div class="flash flash-success" style="margin-bottom:1.5rem;">✅ {{ msg }}</div>
+    {% endif %}
+    {% if err %}
+    <div class="flash flash-error" style="margin-bottom:1.5rem;">{{ err }}</div>
+    {% endif %}
+
+    <!-- TABS -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('tab-profile', this)">👤 Profile Info</button>
+      <button class="tab-btn"        onclick="switchTab('tab-password', this)">🔒 Change Password</button>
+    </div>
+
+    <!-- TAB: Profile Info -->
+    <div class="tab-panel active" id="tab-profile">
+      <div class="form-card" style="max-width:100%;">
+        <form method="POST" action="{{ url_for('profile') }}">
+          <input type="hidden" name="action" value="update"/>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>Full Name</label>
+              <input type="text" name="name" value="{{ user.name }}" required/>
+            </div>
+            <div class="form-group full">
+              <label>Email Address</label>
+              <input type="email" value="{{ user.email }}" disabled style="background:var(--gray-100);cursor:not-allowed;"/>
+              <small style="color:var(--gray-400);font-size:0.78rem;">Email cannot be changed</small>
+            </div>
+            <div class="form-group full">
+              <label>Your County</label>
+              <select name="county">
+                <option value="">-- Select County --</option>
+                {% for c in counties %}
+                <option value="{{c}}" {% if user.county==c %}selected{% endif %}>{{c}}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary" style="margin-top:1.5rem;">Save Changes</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- TAB: Change Password -->
+    <div class="tab-panel" id="tab-password">
+      <div class="form-card" style="max-width:100%;">
+        <form method="POST" action="{{ url_for('profile') }}">
+          <input type="hidden" name="action" value="password"/>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>Current Password</label>
+              <input type="password" name="current" required placeholder="••••••••"/>
+            </div>
+            <div class="form-group full">
+              <label>New Password</label>
+              <input type="password" name="new_password" required placeholder="Min 6 characters" minlength="6"/>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary" style="margin-top:1.5rem;background:var(--amber-600);">Change Password</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Compare Counties — MaizeIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.compare-header { background:linear-gradient(135deg,var(--green-900),var(--green-700)); padding:2.5rem 1.5rem; color:#fff; }
+.compare-header h1 { font-family:var(--font-head); font-size:2rem; font-weight:800; color:var(--gold); }
+.selector-row { display:grid; grid-template-columns:1fr auto 1fr; gap:1rem; align-items:end; margin-bottom:2rem; }
+.vs-badge { display:flex; align-items:center; justify-content:center; font-family:var(--font-head); font-weight:800; font-size:1.1rem; color:var(--amber-600); padding:0.6rem; }
+.stat-compare { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:2rem; }
+.stat-col { background:#fff; border-radius:14px; padding:1.5rem; box-shadow:var(--shadow); border:1px solid var(--gray-200); }
+.stat-col h3 { font-family:var(--font-head); font-size:1rem; font-weight:700; margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:2px solid; }
+.stat-col.col-a h3 { color:#2e8b57; border-color:#2e8b57; }
+.stat-col.col-b h3 { color:#3b82f6; border-color:#3b82f6; }
+.stat-row { display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px solid var(--gray-100); font-size:0.875rem; }
+.stat-row:last-child { border:none; }
+.stat-row .lbl { color:var(--gray-600); }
+.stat-row .val { font-weight:700; color:var(--gray-800); }
+.winner-badge { display:inline-block; background:var(--gold); color:var(--green-900); font-size:0.7rem; font-weight:800; padding:0.1rem 0.45rem; border-radius:10px; margin-left:0.4rem; }
+.verdict-box { background:linear-gradient(135deg,var(--green-900),var(--green-700)); color:#fff; border-radius:16px; padding:1.75rem; margin-bottom:2rem; text-align:center; display:none; }
+.verdict-box.show { display:block; animation:fadeUp 0.4s ease; }
+.verdict-box h3 { font-family:var(--font-head); font-size:1.3rem; font-weight:800; color:var(--gold); margin-bottom:0.5rem; }
+.verdict-box p { opacity:0.85; font-size:0.9rem; line-height:1.7; }
+@media(max-width:768px){ .selector-row{grid-template-columns:1fr;} .stat-compare{grid-template-columns:1fr;} .vs-badge{display:none;} }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="compare-header">
+  <div style="max-width:1200px;margin:0 auto;">
+    <h1>⚖ Compare Two Counties</h1>
+    <p style="opacity:0.85;margin-top:0.4rem;">Side-by-side price analysis to find the best buying or selling opportunity</p>
+  </div>
+</section>
+
+<div class="section">
+  <div class="section-inner">
+
+    <!-- SELECTORS -->
+    <div class="selector-row">
+      <div class="form-group">
+        <label>County A</label>
+        <select id="countyA" onchange="loadComparison()">
+          {% for c in counties %}
+          <option value="{{c}}" {% if c=='Trans-Nzoia' %}selected{% endif %}>{{c}}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="vs-badge">VS</div>
+      <div class="form-group">
+        <label>County B</label>
+        <select id="countyB" onchange="loadComparison()">
+          {% for c in counties %}
+          <option value="{{c}}" {% if c=='Nairobi' %}selected{% endif %}>{{c}}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div id="loadingState" style="text-align:center;padding:2rem;display:none;">
+      <div class="spinner"></div>
+      <p style="margin-top:0.75rem;color:var(--gray-400);font-size:0.875rem;">Loading comparison...</p>
+    </div>
+
+    <!-- VERDICT -->
+    <div class="verdict-box" id="verdictBox">
+      <h3 id="verdictTitle"></h3>
+      <p id="verdictText"></p>
+    </div>
+
+    <!-- STAT CARDS -->
+    <div class="stat-compare" id="statCompare" style="display:none;">
+      <div class="stat-col col-a">
+        <h3 id="colATitle">County A</h3>
+        <div id="colAStats"></div>
+      </div>
+      <div class="stat-col col-b">
+        <h3 id="colBTitle">County B</h3>
+        <div id="colBStats"></div>
+      </div>
+    </div>
+
+    <!-- CHART -->
+    <div class="chart-box" id="compareChartBox" style="display:none;">
+      <h3>📈 Price Trend Comparison</h3>
+      <canvas id="compareChart"></canvas>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let compareChart = null;
+
+async function loadComparison() {
+  const cA = document.getElementById('countyA').value;
+  const cB = document.getElementById('countyB').value;
+  if (cA === cB) return;
+
+  document.getElementById('loadingState').style.display = 'block';
+  document.getElementById('statCompare').style.display = 'none';
+  document.getElementById('compareChartBox').style.display = 'none';
+  document.getElementById('verdictBox').classList.remove('show');
+
+  const [resA, resB] = await Promise.all([
+    fetch(`/api/price-trend?county=${encodeURIComponent(cA)}`),
+    fetch(`/api/price-trend?county=${encodeURIComponent(cB)}`)
+  ]);
+  const [dataA, dataB] = await Promise.all([resA.json(), resB.json()]);
+
+  document.getElementById('loadingState').style.display = 'none';
+  if (!dataA.length || !dataB.length) return;
+
+  // Compute stats
+  function stats(data) {
+    const prices = data.map(d => d.price);
+    const recent = data.slice(-8).map(d=>d.price);
+    const avg    = prices.reduce((a,b)=>a+b,0)/prices.length;
+    const recAvg = recent.reduce((a,b)=>a+b,0)/recent.length;
+    const trend  = recent[recent.length-1] - recent[0];
+    return {
+      avg:    avg.toFixed(2),
+      min:    Math.min(...prices).toFixed(2),
+      max:    Math.max(...prices).toFixed(2),
+      recent: recAvg.toFixed(2),
+      trend:  trend.toFixed(2),
+      points: data.length,
+    };
+  }
+
+  const sA = stats(dataA);
+  const sB = stats(dataB);
+
+  function renderStats(el, s, other) {
+    const rows = [
+      { lbl:'All-time avg',     va: sA===s?sA.avg:sB.avg, vb: sA===s?sB.avg:sA.avg, fmt:'KSh X/kg', lower:true },
+      { lbl:'Recent avg (8wk)', va: sA===s?sA.recent:sB.recent, vb: sA===s?sB.recent:sA.recent, fmt:'KSh X/kg', lower:true },
+      { lbl:'Lowest recorded',  va: sA===s?sA.min:sB.min, vb: sA===s?sB.min:sA.min, fmt:'KSh X', lower:true },
+      { lbl:'Highest recorded', va: sA===s?sA.max:sB.max, vb: sA===s?sB.max:sA.max, fmt:'KSh X', lower:false },
+      { lbl:'Data points',      va: sA===s?sA.points:sB.points, vb: null, fmt:'X weeks', lower:false },
+      { lbl:'Recent trend',     va: sA===s?sA.trend:sB.trend, vb: null, fmt:'X KSh', lower:false },
+    ];
+    return rows.map(r => {
+      const isWinner = r.vb !== null && (r.lower ? parseFloat(r.va) < parseFloat(r.vb) : parseFloat(r.va) > parseFloat(r.vb));
+      const trend = r.lbl==='Recent trend' ? (parseFloat(r.va)>=0?'↑ Rising':'↓ Falling') : null;
+      return `<div class="stat-row">
+        <span class="lbl">${r.lbl}</span>
+        <span class="val">KSh ${r.va}${isWinner?'<span class="winner-badge">✓ Better</span>':''}${trend?` <span style="color:${parseFloat(r.va)>=0?'#e53e3e':'#2e8b57'}">${trend}</span>`:''}
+        </span>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('colATitle').textContent = cA;
+  document.getElementById('colBTitle').textContent = cB;
+  document.getElementById('colAStats').innerHTML = renderStats(document.getElementById('colAStats'), sA, sB);
+  document.getElementById('colBStats').innerHTML = renderStats(document.getElementById('colBStats'), sB, sA);
+  document.getElementById('statCompare').style.display = 'grid';
+
+  // Verdict
+  const avgA = parseFloat(sA.avg), avgB = parseFloat(sB.avg);
+  const cheaper = avgA < avgB ? cA : cB;
+  const dearer  = avgA < avgB ? cB : cA;
+  const diff    = Math.abs(avgA - avgB).toFixed(2);
+  document.getElementById('verdictTitle').textContent = `Buy in ${cheaper}, sell in ${dearer}`;
+  document.getElementById('verdictText').textContent  =
+    `${dearer} prices average KSh ${diff}/kg higher than ${cheaper}. `+
+    `If transport cost is under KSh ${diff}/kg you can profit from this price difference.`;
+  document.getElementById('verdictBox').classList.add('show');
+
+  // Chart
+  const allDates = [...new Set([...dataA.map(d=>d.date), ...dataB.map(d=>d.date)])].sort();
+  const mapA = Object.fromEntries(dataA.map(d=>[d.date,d.price]));
+  const mapB = Object.fromEntries(dataB.map(d=>[d.date,d.price]));
+
+  if (compareChart) compareChart.destroy();
+  document.getElementById('compareChartBox').style.display = 'block';
+  compareChart = new Chart(document.getElementById('compareChart'), {
+    type: 'line',
+    data: {
+      labels: allDates,
+      datasets: [
+        { label:`${cA}`, data: allDates.map(d=>mapA[d]||null), borderColor:'#2e8b57', backgroundColor:'rgba(46,139,87,0.06)', fill:true, tension:0.4, pointRadius:0 },
+        { label:`${cB}`, data: allDates.map(d=>mapB[d]||null), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.06)', fill:true, tension:0.4, pointRadius:0 },
+      ]
+    },
+    options: {
+      responsive:true,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top' } },
+      scales: {
+        y:{ title:{ display:true, text:'Wholesale Price (KSh/kg)' } },
+        x:{ ticks:{ maxTicksLimit:12 } }
+      }
+    }
+  });
+}
+
+// Load on page open
+loadComparison();
+</script>
+{% endblock %}

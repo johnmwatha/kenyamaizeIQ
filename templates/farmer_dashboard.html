@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Farmer Dashboard — MaizeIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.farmer-hero { background:linear-gradient(135deg,#0d3320 0%,#226b42 60%,#2e8b57 100%); color:#fff; padding:2.5rem 1.5rem; position:relative; overflow:hidden; }
+.farmer-hero::after { content:'🌾'; position:absolute; right:2rem; top:50%; transform:translateY(-50%); font-size:5rem; opacity:0.15; }
+.tip-card { background:#fff; border-radius:14px; padding:1.25rem; box-shadow:var(--shadow); border-left:4px solid var(--green-600); margin-bottom:1rem; }
+.tip-card h4 { font-family:var(--font-head); font-weight:700; color:var(--green-900); margin-bottom:0.3rem; font-size:0.95rem; }
+.tip-card p { font-size:0.85rem; color:var(--gray-600); line-height:1.6; }
+.action-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.75rem; margin-bottom:1.75rem; }
+.act-btn { background:#fff; border-radius:12px; padding:1.1rem; text-align:center; text-decoration:none; color:var(--gray-800); box-shadow:var(--shadow); border:1.5px solid var(--gray-200); transition:all 0.2s; display:block; }
+.act-btn:hover { border-color:var(--green-400); transform:translateY(-2px); }
+.act-btn .i { font-size:1.6rem; display:block; margin-bottom:0.3rem; }
+.act-btn span { font-size:0.8rem; font-weight:600; color:var(--green-900); }
+.farmer-grid { display:grid; grid-template-columns:2fr 1fr; gap:1.5rem; }
+@media(max-width:900px){ .farmer-grid{grid-template-columns:1fr;} }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- FARMER HERO -->
+<div class="farmer-hero">
+  <div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+    <div style="width:52px;height:52px;border-radius:50%;background:var(--gold);color:var(--green-900);display:flex;align-items:center;justify-content:center;font-family:var(--font-head);font-size:1.4rem;font-weight:800;flex-shrink:0;">
+      {{ user.name[0].upper() }}
+    </div>
+    <div>
+      <div style="font-size:0.75rem;opacity:0.7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:0.2rem;">🧑‍🌾 Farmer Account</div>
+      <h1 style="font-family:var(--font-head);font-size:1.6rem;font-weight:800;color:var(--gold);margin:0;">
+        Welcome, {{ user.name.split()[0] }}!
+      </h1>
+      <p style="opacity:0.8;margin-top:0.2rem;">
+        {% if user.county %}📍 {{ user.county }} · {% endif %}Here's your maize price outlook
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="dash-body">
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="margin-bottom:1.5rem;">
+    <div class="kpi-card">
+      <div class="kpi-label">My Predictions</div>
+      <div class="kpi-val">{{ predictions|length }}</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Latest Price Forecast</div>
+      <div class="kpi-val" style="font-size:1.35rem;">
+        {% if predictions %}KSh {{ "%.2f"|format(predictions[0]['predicted_price']) }}/kg{% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Current Season</div>
+      <div class="kpi-val" id="seasonKpi" style="font-size:1rem;padding-top:0.3rem;"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">My County</div>
+      <div class="kpi-val" style="font-size:1rem;padding-top:0.3rem;">{{ user.county or 'Not set' }}</div>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="action-row">
+    <a href="{{ url_for('prediction') }}" class="act-btn"><span class="i">🌽</span><span>Get Price Forecast</span></a>
+    <a href="{{ url_for('historical') }}" class="act-btn"><span class="i">📊</span><span>Market Prices</span></a>
+    
+    <a href="{{ url_for('profile') }}"    class="act-btn"><span class="i">👤</span><span>My Profile</span></a>
+  </div>
+
+  <div class="farmer-grid">
+
+    <!-- LEFT -->
+    <div>
+      <!-- County price chart -->
+      {% if user.county %}
+      <div class="chart-box" style="margin-bottom:1.5rem;">
+        <h3>📈 {{ user.county }} — Recent Wholesale Prices</h3>
+        <canvas id="farmerChart"></canvas>
+      </div>
+      {% endif %}
+
+      <!-- Prediction history -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>My Price Predictions</h2>
+          {% if predictions %}
+          <a href="/api/predictions/download" class="btn-download">⬇ Export</a>
+          {% endif %}
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Date</th><th>County</th><th>Maize Type</th><th>Predicted (KSh/kg)</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              {% if predictions %}
+                {% for p in predictions %}
+                <tr>
+                  <td>{{ p['prediction_date'] }}</td>
+                  <td><span class="badge badge-green">{{ p['county'] }}</span></td>
+                  <td>{{ p['classification'] }}</td>
+                  <td>
+                    <strong style="color:var(--green-700);">KSh {{ "%.2f"|format(p['predicted_price']) }}</strong>
+                    <span style="font-size:0.72rem;color:var(--gray-400);">
+                      ({{ "%.2f"|format(p['predicted_price']*0.92) }}–{{ "%.2f"|format(p['predicted_price']*1.08) }})
+                    </span>
+                  </td>
+                  <td>
+                    <button onclick="printReport('{{ p['county'] }}','{{ p['classification'] }}','{{ '%.2f'|format(p['predicted_price']) }}','{{ p['prediction_date'] }}')"
+                      style="background:none;border:1px solid var(--gray-200);border-radius:5px;padding:0.2rem 0.5rem;cursor:pointer;font-size:0.72rem;">
+                      🖨
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="5" class="empty-state">
+                  No predictions yet. <a href="{{ url_for('prediction') }}" style="color:var(--green-700);">Get your first forecast →</a>
+                </td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: tips -->
+    <div>
+      <!-- Season advisory -->
+      <div class="tip-card">
+        <h4 id="tipTitle">🗓 Season Advisory</h4>
+        <p id="tipText">Loading...</p>
+      </div>
+
+      <!-- When to sell guide -->
+      <div class="tip-card" style="border-color:var(--amber-400);">
+        <h4>💡 When to Sell Your Maize</h4>
+        <p>
+          <strong>Best time:</strong> January–February when stocks run low and prices peak.<br><br>
+          <strong>Avoid:</strong> Selling immediately after harvest (July–August) — this is when prices are lowest and most farmers sell.<br><br>
+          <strong>Tip:</strong> If you can store 3 months, you can earn 20–40% more.
+        </p>
+      </div>
+
+      <!-- SMS tip -->
+      <div class="tip-card" style="border-color:#3b82f6;">
+        <h4>📱 Get Prices via SMS</h4>
+        <p>
+          Don't have internet? Text <strong>PRICE {{ user.county or 'Nakuru' }}</strong> to our shortcode and get the latest prediction sent to <strong>{{ user.phone or 'your phone' }}</strong>.
+        </p>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Season advisory
+const month = new Date().getMonth() + 1;
+const seasons = {
+  1:{ title:'📈 Lean Season (Jan)', text:'Stocks low, prices high. Best time to sell stored maize.' },
+  2:{ title:'📈 Lean Season (Feb)', text:'Prices near annual peak. Sell before long rains bring supply.' },
+  3:{ title:'🌱 Long Rains Begin', text:'Planting time. Prices still high — buy inputs now.' },
+  4:{ title:'🌧 Long Rains', text:'Growing season. Avoid selling, let prices stabilise.' },
+  5:{ title:'🌧 Late Long Rains', text:'Prices starting to soften as harvest approaches.' },
+  6:{ title:'📦 Pre-Harvest', text:'Good time to source storage bags. Harvest is near.' },
+  7:{ title:'🌾 Harvest Season', text:'Buy inputs for storage. Hold your maize if possible — do not sell now.' },
+  8:{ title:'🌾 Harvest Continues', text:'Prices at annual low. Store maize for 3–4 months for best returns.' },
+  9:{ title:'📦 Post-Harvest', text:'Stock up now. Prices will rise in 2–3 months.' },
+  10:{ title:'🌦 Short Rains', text:'Second planting. Moderate prices — good time to sell stored maize.' },
+  11:{ title:'🌦 Short Rains Continue', text:'Monitor market. Prices stabilising.' },
+  12:{ title:'📊 Year-End', text:'Prepare for lean season. Price rise expected in January.' },
+};
+const s = seasons[month];
+document.getElementById('tipTitle').textContent = s.title;
+document.getElementById('tipText').textContent  = s.text;
+document.getElementById('seasonKpi').textContent = s.title.split(' ').slice(1).join(' ');
+
+{% if user.county %}
+(async () => {
+  const res  = await fetch('/api/price-trend?county={{ user.county }}');
+  const data = await res.json();
+  if (!data.length) return;
+  const recent = data.slice(-16);
+  new Chart(document.getElementById('farmerChart'), {
+    type:'line',
+    data:{
+      labels: recent.map(d=>d.date.slice(5)),
+      datasets:[{
+        label:'Weekly avg wholesale (KSh/kg)',
+        data: recent.map(d=>d.price),
+        borderColor:'#2e8b57', backgroundColor:'rgba(46,139,87,0.08)',
+        fill:true, tension:0.4, pointRadius:4,
+        pointBackgroundColor:'#2e8b57', pointBorderColor:'#fff', pointBorderWidth:2,
+      }]
+    },
+    options:{ responsive:true, plugins:{legend:{display:false}},
+      scales:{ y:{title:{display:true,text:'KSh/kg'}}, x:{ticks:{maxTicksLimit:8}} } }
+  });
+})();
+{% endif %}
+
+function printReport(county, type, price, dt) {
+  const low = (price*0.92).toFixed(2), high = (price*1.08).toFixed(2);
+  const today = new Date().toLocaleDateString('en-KE',{dateStyle:'full'});
+  const html = `<div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;padding:2rem;">
+    <div style="background:#0d3320;color:#f5c842;padding:1.25rem;border-radius:10px;margin-bottom:1.5rem;">
+      <h1 style="margin:0;font-size:1.4rem;">🌽 MaizeIQ Kenya — Farmer Price Report</h1></div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+      <tr style="background:#edf7f1;"><td style="padding:.65rem 1rem;font-weight:bold;color:#0d3320;">County</td><td style="padding:.65rem 1rem;">${county}</td></tr>
+      <tr><td style="padding:.65rem 1rem;font-weight:bold;color:#0d3320;">Maize Type</td><td style="padding:.65rem 1rem;">${type}</td></tr>
+      <tr style="background:#edf7f1;"><td style="padding:.65rem 1rem;font-weight:bold;color:#0d3320;">Predicted Price</td><td style="padding:.65rem 1rem;font-size:1.3rem;font-weight:bold;color:#2e8b57;">KSh ${price}/kg</td></tr>
+      <tr><td style="padding:.65rem 1rem;font-weight:bold;color:#0d3320;">Range</td><td style="padding:.65rem 1rem;">KSh ${low} – KSh ${high}</td></tr>
+      <tr style="background:#edf7f1;"><td style="padding:.65rem 1rem;font-weight:bold;color:#0d3320;">Date</td><td style="padding:.65rem 1rem;">${dt}</td></tr>
+      <tr><td style="padding:.65rem 1rem;font-weight:bold;color:#0d3320;">Printed</td><td style="padding:.65rem 1rem;">${today}</td></tr>
+    </table>
+    <div style="margin-top:1.5rem;padding:1rem;background:#fff8e1;border-radius:8px;font-size:0.8rem;color:#5a3e00;">
+      ⚠️ AI-generated prediction. Verify with your local market before making large transactions.
+    </div></div>`;
+  const w = window.open('','_blank','width=700,height=600');
+  w.document.write(`<html><head><title>MaizeIQ Farmer Report</title></head><body>${html}</body></html>`);
+  w.document.close(); w.print();
+}
+</script>
+{% endblock %}

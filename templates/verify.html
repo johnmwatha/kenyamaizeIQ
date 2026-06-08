@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Verify Phone — MaizeIQ{% endblock %}
+
+{% block head %}
+<style>
+.otp-box { display:flex; gap:0.5rem; justify-content:center; margin:1.5rem 0; }
+.otp-box input {
+  width:48px; height:56px; text-align:center; font-size:1.5rem; font-weight:700;
+  border:2px solid var(--gray-200); border-radius:10px; font-family:var(--font-head);
+  color:var(--green-900); transition:border-color 0.2s;
+}
+.otp-box input:focus { outline:none; border-color:var(--green-600); box-shadow:0 0 0 3px rgba(46,139,87,0.12); }
+.otp-box input.filled { border-color:var(--green-400); background:var(--green-50); }
+.countdown { font-size:0.85rem; color:var(--gray-400); text-align:center; margin-top:0.5rem; }
+.countdown span { color:var(--green-700); font-weight:700; }
+.dev-note { background:var(--amber-100); border:1px solid var(--amber-400); border-radius:8px; padding:0.75rem 1rem; font-size:0.82rem; color:var(--amber-600); margin-bottom:1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-box" style="max-width:400px;text-align:center;">
+
+    <div style="font-size:3rem;margin-bottom:0.5rem;">📱</div>
+    <h2>Verify Your Phone</h2>
+    <p style="margin-bottom:0.25rem;">
+      We sent a 6-digit code to<br>
+      <strong style="color:var(--green-700);">{{ phone or 'your phone' }}</strong>
+    </p>
+    <p style="font-size:0.8rem;color:var(--gray-400);">Check your SMS messages</p>
+
+    {% if error %}
+    <div class="flash flash-error" style="text-align:left;">{{ error }}</div>
+    {% endif %}
+
+    {% if dev_otp %}
+    <div class="dev-note">
+      🧪 <strong>Dev mode:</strong> SMS unavailable — your OTP is <strong style="font-size:1.1rem;letter-spacing:0.15em;">{{ dev_otp }}</strong>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('verify_otp') }}" id="otpForm">
+      <div class="otp-box" id="otpBox">
+        <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]"/>
+        <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]"/>
+        <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]"/>
+        <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]"/>
+        <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]"/>
+        <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]"/>
+      </div>
+      <input type="hidden" name="otp" id="otpHidden"/>
+      <button type="submit" class="btn-primary" style="width:100%;" id="verifyBtn">Verify & Continue</button>
+    </form>
+
+    <div class="countdown" id="countdown">Code expires in <span id="timer">10:00</span></div>
+
+    <div style="margin-top:1.25rem;">
+      <button id="resendBtn" onclick="resendOtp()" disabled
+        style="background:none;border:none;color:var(--gray-400);font-size:0.875rem;cursor:not-allowed;">
+        Resend code (wait <span id="resendTimer">60s</span>)
+      </button>
+    </div>
+
+    <div class="auth-link" style="margin-top:1rem;">
+      Wrong number? <a href="{{ url_for('register') }}">Register again</a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── OTP digit input behaviour ─────────────────────────────────────
+const digits = document.querySelectorAll('.otp-digit');
+digits.forEach((inp, i) => {
+  inp.addEventListener('input', e => {
+    inp.classList.toggle('filled', inp.value !== '');
+    if (inp.value && i < digits.length - 1) digits[i+1].focus();
+    updateHidden();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !inp.value && i > 0) digits[i-1].focus();
+  });
+  inp.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
+    digits.forEach((d,j) => { d.value = txt[j] || ''; d.classList.toggle('filled', !!d.value); });
+    updateHidden();
+    digits[Math.min(txt.length, digits.length-1)].focus();
+  });
+});
+
+function updateHidden() {
+  document.getElementById('otpHidden').value = [...digits].map(d=>d.value).join('');
+}
+
+document.getElementById('otpForm').addEventListener('submit', e => {
+  const otp = [...digits].map(d=>d.value).join('');
+  if (otp.length !== 6) { e.preventDefault(); alert('Please enter the full 6-digit code'); return; }
+  document.getElementById('verifyBtn').textContent = 'Verifying...';
+  document.getElementById('verifyBtn').disabled = true;
+});
+
+// ── Countdown timer (10 min) ──────────────────────────────────────
+let secs = 600;
+const timerEl = document.getElementById('timer');
+const tick = setInterval(() => {
+  secs--;
+  if (secs <= 0) { clearInterval(tick); timerEl.parentElement.textContent = 'Code expired. Please resend.'; return; }
+  const m = Math.floor(secs/60), s = secs%60;
+  timerEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}, 1000);
+
+// ── Resend countdown (60s) ────────────────────────────────────────
+let resendSecs = 60;
+const resendEl  = document.getElementById('resendTimer');
+const resendBtn = document.getElementById('resendBtn');
+const resendTick = setInterval(() => {
+  resendSecs--;
+  resendEl.textContent = resendSecs + 's';
+  if (resendSecs <= 0) {
+    clearInterval(resendTick);
+    resendBtn.disabled = false;
+    resendBtn.style.color = 'var(--green-700)';
+    resendBtn.style.cursor = 'pointer';
+    resendBtn.textContent = 'Resend code';
+  }
+}, 1000);
+
+async function resendOtp() {
+  resendBtn.disabled = true;
+  resendBtn.textContent = 'Sending...';
+  const res  = await fetch('/verify/resend', {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    resendBtn.textContent = '✅ Sent!';
+    if (data.dev_otp) {
+      const note = document.querySelector('.dev-note') || document.createElement('div');
+      note.className = 'dev-note';
+      note.innerHTML = `🧪 <strong>Dev mode:</strong> New OTP is <strong style="font-size:1.1rem;letter-spacing:0.15em;">${data.dev_otp}</strong>`;
+      document.querySelector('.auth-box').insertBefore(note, document.getElementById('otpForm'));
+    }
+    // Reset main timer
+    secs = 600;
+  } else {
+    resendBtn.textContent = '❌ Failed — try again';
+    resendBtn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

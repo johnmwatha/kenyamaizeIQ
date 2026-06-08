@@ -1,0 +1,708 @@
+{% extends "base.html" %}
+{% block title %}Predict Maize Price — MaizeIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.pred-layout { display:grid; grid-template-columns:1fr 1fr; gap:2rem; align-items:start; }
+.tips-box { background:#fff; border-radius:18px; padding:1.75rem; box-shadow:var(--shadow); border:1px solid var(--gray-200); margin-bottom:1.5rem; }
+.tips-box h3 { font-family:var(--font-head); font-size:1rem; font-weight:700; color:var(--green-900); margin-bottom:1rem; }
+.tip { display:flex; gap:0.75rem; margin-bottom:0.85rem; font-size:0.875rem; color:var(--gray-600); line-height:1.5; }
+.tip-icon { font-size:1.1rem; flex-shrink:0; margin-top:1px; }
+.pred-btn { width:100%; padding:0.9rem; font-size:1rem; font-family:var(--font-head); font-weight:700; background:var(--green-700); color:#fff; border:none; border-radius:10px; cursor:pointer; transition:all 0.2s; margin-top:1.5rem; }
+.pred-btn:hover { background:var(--green-600); transform:translateY(-1px); }
+.pred-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
+.loading-row { display:none; justify-content:center; padding:1rem; }
+.trend-box { background:#fff; border-radius:18px; padding:1.75rem; box-shadow:var(--shadow); border:1px solid var(--gray-200); margin-top:1.5rem; display:none; }
+.trend-box.show { display:block; animation:fadeUp 0.4s ease; }
+/* New styles for price type selector */
+.price-type-group { background:#f8fafc; border-radius:14px; padding:1rem; margin-bottom:1.25rem; border:1px solid var(--gray-200); }
+.price-type-buttons { display:flex; gap:0.75rem; margin-bottom:1rem; }
+.price-type-btn { flex:1; padding:0.6rem; border-radius:10px; border:2px solid var(--gray-300); background:#fff; font-weight:600; cursor:pointer; transition:all 0.2s; text-align:center; }
+.price-type-btn.active { background:var(--green-700); border-color:var(--green-700); color:#fff; }
+.price-type-btn.wholesale.active { background:var(--green-700); }
+.price-type-btn.retail.active { background:var(--gold); border-color:var(--gold); color:#1e2a1e; }
+.price-input-group { margin-bottom:1rem; }
+.price-input-group label { display:block; margin-bottom:0.4rem; font-weight:600; font-size:0.85rem; }
+.price-input-group input { width:100%; padding:0.7rem; border:1px solid var(--gray-300); border-radius:10px; }
+.price-hint { font-size:0.7rem; color:var(--gray-400); margin-top:0.2rem; }
+.source-option { margin-top:0.75rem; padding:0.5rem; background:#f0f7f0; border-radius:8px; font-size:0.8rem; }
+.source-option label { margin-left:0.4rem; }
+/* Method badge */
+.method-badge { display:inline-block; background:rgba(0,0,0,0.2); border-radius:20px; padding:0.2rem 0.6rem; font-size:0.7rem; margin-top:0.5rem; }
+@media(max-width:900px){ .pred-layout{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section style="background:linear-gradient(135deg,var(--green-900),var(--green-700));padding:2.5rem 1.5rem;color:#fff;">
+  <div style="max-width:1200px;margin:0 auto;">
+    <h1 style="font-family:var(--font-head);font-size:2rem;font-weight:800;color:var(--gold);">Maize Price Prediction</h1>
+    <p style="opacity:0.85;margin-top:0.4rem;">Get AI-powered price forecasts — enter wholesale OR retail price, or let us use historical data</p>
+  </div>
+</section>
+
+<div class="section">
+  <div class="section-inner">
+    <div class="pred-layout">
+
+      <!-- LEFT: FORM + RESULT + TREND -->
+      <div>
+        <div class="form-card">
+          <div class="form-title">Enter Market Details</div>
+          <div class="form-subtitle">All fields improve prediction accuracy</div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>County *</label>
+              <select id="county" onchange="onCountyChange()">
+                <option value="">-- Select County --</option>
+                {% for c in counties %}
+                <option value="{{c}}">{{c}}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <!-- Add after the county dropdown -->
+<div class="form-group">
+    <label>📅 Predict For:</label>
+    <select id="prediction_timeframe" onchange="toggleFutureOptions()">
+        <option value="current">Today's Price</option>
+        <option value="next_week">Next Week (7 days)</option>
+        <option value="next_month">Next Month (30 days)</option>
+        <option value="next_season">Next Planting Season (March)</option>
+        <option value="custom">Choose Custom Date</option>
+    </select>
+</div>
+
+<div id="custom_date_group" style="display: none; margin-bottom: 1rem;">
+    <label>Select Date:</label>
+    <input type="date" id="custom_date" class="form-control">
+    <small class="text-muted">Choose any future date for price prediction</small>
+</div>
+
+<!-- Optional: Show current price for reference -->
+<div id="current_price_display" style="display: none; background: #e8f5e9; padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem;">
+    <strong>💰 Current Price:</strong> <span id="current_price_value">—</span> KSh/kg
+</div>
+
+<!-- Prediction result area with advice -->
+<div id="future_prediction_result" style="display: none;">
+    <div class="alert" id="advice_alert"></div>
+    <div class="price-comparison">
+        <span>Current: KSh <span id="compare_current">—</span></span>
+        <span>→</span>
+        <span>Future: KSh <span id="compare_future">—</span></span>
+        <span id="price_change_badge"></span>
+    </div>
+</div>
+
+            <div class="form-group">
+              <label>Maize Classification</label>
+              <select id="classification">
+                {% for cl in classifications %}
+                <option value="{{cl}}">{{cl}}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Supply Volume (kg)</label>
+              <input type="number" id="supply_volume" placeholder="e.g. 5000" value="5000" min="50"/>
+            </div>
+
+            <div class="form-group">
+              <label>Temperature (°C)</label>
+              <input type="number" id="temperature" placeholder="e.g. 19.5" value="19.5" step="0.1"/>
+            </div>
+
+            <div class="form-group">
+              <label>Today's Rainfall (mm)</label>
+              <input style="padding-bottom: -10px;" type="number" id="rainfall" placeholder="e.g. 2.0" value="0" step="0.1" min="0"/>
+            </div>
+          </div>
+
+          <!-- NEW: Price Type Selector -->
+          <div class="price-type-group">
+            <div class="price-type-buttons">
+              <div class="price-type-btn wholesale active" id="priceTypeWholesale" onclick="setPriceType('wholesale')">
+                💰 I know Wholesale Price
+              </div>
+              <div class="price-type-btn retail" id="priceTypeRetail" onclick="setPriceType('retail')">
+                🛒 I know my Retail Price
+              </div>
+            </div>
+
+            <!-- Wholesale Price Input (initially visible) -->
+            <div id="wholesaleGroup" class="price-input-group">
+              <label>💰 Wholesale Price (KES/kg)</label>
+              <input type="number" id="wholesale_price" step="0.01" placeholder="e.g., 50.00" value="">
+              <div class="price-hint">What traders pay at the market</div>
+            </div>
+
+            <!-- Retail Price Input (initially hidden) -->
+            <div id="retailGroup" class="price-input-group" style="display:none;">
+              <label>🛒 Your Retail Price (KES/kg)</label>
+              <input type="number" id="retail_price" step="0.01" placeholder="e.g., 65.00" value="">
+              <div class="price-hint">What you sell for at your local market — we'll estimate wholesale</div>
+            </div>
+
+            <!-- Price Source Option -->
+            <div class="source-option">
+              <input type="checkbox" id="useHistoricalFallback" checked>
+              <label for="useHistoricalFallback">🔍 Auto-fill missing prices using historical data</label>
+            </div>
+          </div>
+
+          <!-- Price Lag Fields (kept optional with better labels) -->
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Price 1 Week Ago (KSh) <span style="font-weight:normal;font-size:0.7rem;">(optional)</span></label>
+              <input type="number" id="price_lag_7d" placeholder="Auto from history" step="0.01"/>
+            </div>
+
+            <div class="form-group">
+              <label>Price 2 Weeks Ago (KSh) <span style="font-weight:normal;font-size:0.7rem;">(optional)</span></label>
+              <input type="number" id="price_lag_14d" placeholder="Auto from history" step="0.01"/>
+            </div>
+
+            <div class="form-group">
+              <label>Price 1 Month Ago (KSh) <span style="font-weight:normal;font-size:0.7rem;">(optional)</span></label>
+              <input type="number" id="price_lag_30d" placeholder="Auto from history" step="0.01"/>
+            </div>
+          </div>
+  
+
+<div id="custom_date_group" style="display:none;">
+    <label>Select Date:</label>
+    <input type="date" id="custom_date">
+</div>
+
+<script>
+function toggleFutureOptions() {
+    const timeframe = document.getElementById('prediction_timeframe').value;
+    const customGroup = document.getElementById('custom_date_group');
+    customGroup.style.display = timeframe === 'custom' ? 'block' : 'none';
+}
+
+async function runPrediction() {
+    const county = document.getElementById('county').value;
+    if (!county) { showError('Please select a county'); return; }
+
+    const btn = document.getElementById('predictBtn');
+    const loader = document.getElementById('loadingRow');
+    btn.disabled = true;
+    loader.style.display = 'flex';
+    document.getElementById('formError').style.display = 'none';
+    document.getElementById('resultBox').classList.remove('show');
+
+    // Get prediction timeframe
+    const prediction_type = document.getElementById('prediction_timeframe').value;
+    const custom_date = document.getElementById('custom_date').value;
+    
+    // Build payload
+    let payload = {
+        county: county,
+        classification: document.getElementById('classification').value,
+        supply_volume: parseFloat(document.getElementById('supply_volume').value) || 5000,
+        temperature: parseFloat(document.getElementById('temperature').value) || null,
+        rainfall: parseFloat(document.getElementById('rainfall').value) || null,
+        price_type: currentPriceType,
+        prediction_type: prediction_type,
+        target_date: custom_date
+    };
+
+    // Add price based on type
+    if (currentPriceType === 'wholesale') {
+        const wholesale = document.getElementById('wholesale_price').value;
+        if (wholesale) payload.wholesale_price = parseFloat(wholesale);
+    } else {
+        const retail = document.getElementById('retail_price').value;
+        if (retail) payload.retail_price = parseFloat(retail);
+    }
+
+    console.log('Sending payload:', payload);
+
+    try {
+        // Use the future prediction endpoint
+        const res = await fetch('/api/predict_future', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        console.log('Response:', data);
+
+        if (data.success) {
+            // Display results
+            displayPredictionResult(data);
+        } else {
+            showError(data.error || 'Prediction failed');
+        }
+    } catch(e) {
+        console.error('Error:', e);
+        showError('Network error. Please check your connection.');
+    } finally {
+        btn.disabled = false;
+        loader.style.display = 'none';
+    }
+}
+
+function displayPredictionResult(data) {
+    // Main prediction display
+    document.getElementById('resultPrice').textContent = 'KSh ' + data.predicted_price.toFixed(2);
+    document.getElementById('resultBand').textContent = 
+        `Confidence range: KSh ${data.confidence_low} – ${data.confidence_high} per kg`;
+    document.getElementById('metaCounty').textContent = '📍 ' + data.county;
+    document.getElementById('metaClass').textContent = '🌽 ' + data.classification;
+    document.getElementById('metaDate').textContent = '📅 ' + data.date_label;
+    
+    // Show price change badge
+    if (data.price_change_percent) {
+        const changeHtml = document.createElement('div');
+        const isUp = data.price_change_percent > 0;
+        const arrow = isUp ? '📈' : '📉';
+        const color = isUp ? '#28a745' : '#dc3545';
+        changeHtml.innerHTML = `
+            <div style="margin-top: 0.5rem; padding: 0.5rem; background: ${isUp ? '#d4edda' : '#f8d7da'}; border-radius: 8px;">
+                ${arrow} Price change: <strong style="color: ${color};">${data.price_change_percent > 0 ? '+' : ''}${data.price_change_percent}%</strong>
+                compared to current price of KSh ${data.current_price}
+            </div>
+        `;
+        
+        const resultBox = document.getElementById('resultBox');
+        const existingChange = resultBox.querySelector('.price-change-badge');
+        if (existingChange) existingChange.remove();
+        changeHtml.className = 'price-change-badge';
+        resultBox.appendChild(changeHtml);
+    }
+    
+    // Show advice
+    if (data.advice) {
+        const adviceDiv = document.createElement('div');
+        adviceDiv.className = `advice-box advice-${data.advice.color}`;
+        adviceDiv.innerHTML = `
+            <strong>💡 ${data.advice.recommendation}</strong><br>
+            ${data.advice.message}
+        `;
+        adviceDiv.style.marginTop = '1rem';
+        adviceDiv.style.padding = '0.75rem';
+        adviceDiv.style.borderRadius = '10px';
+        adviceDiv.style.backgroundColor = data.advice.color === 'success' ? '#d4edda' : 
+                                           data.advice.color === 'danger' ? '#f8d7da' : '#fff3cd';
+        adviceDiv.style.color = data.advice.color === 'success' ? '#155724' : 
+                                 data.advice.color === 'danger' ? '#721c24' : '#856404';
+        
+        const resultBox = document.getElementById('resultBox');
+        const existingAdvice = resultBox.querySelector('.advice-box');
+        if (existingAdvice) existingAdvice.remove();
+        resultBox.appendChild(adviceDiv);
+    }
+    
+    document.getElementById('resultBox').classList.add('show');
+    
+    // Load trend chart with prediction
+    loadTrendChart(data.county, data.predicted_price, data.target_date);
+}
+    
+    // Also show current vs future comparison
+    if (data.current_price && data.days_ahead > 0) {
+        const percentChange = ((data.predicted_price - data.current_price) / data.current_price * 100).toFixed(1);
+        const changeIcon = percentChange > 0 ? '📈' : (percentChange < 0 ? '📉' : '➡️');
+        
+        const comparison = document.createElement('div');
+        comparison.style.marginTop = '0.5rem';
+        comparison.style.fontSize = '0.85rem';
+        comparison.style.opacity = '0.9';
+        comparison.innerHTML = `
+            Current: KSh ${data.current_price.toFixed(2)} → 
+            ${data.date_label}: KSh ${data.predicted_price.toFixed(2)} 
+            ${changeIcon} ${Math.abs(percentChange)}% ${percentChange > 0 ? 'increase' : 'decrease'}
+        `;
+        
+        const metaDiv = document.querySelector('.result-meta');
+        const existingComp = metaDiv.querySelector('.comparison');
+        if (existingComp) existingComp.remove();
+        comparison.className = 'comparison';
+        metaDiv.appendChild(comparison);
+    }
+    
+    // Load trend chart with future prediction
+    loadTrendChart(data.county, data.predicted_price, data.target_date);
+}
+
+// Update loadTrendChart to show future prediction point
+async function loadTrendChart(county, predictedPrice, targetDate) {
+    const res = await fetch(`/api/price-trend?county=${encodeURIComponent(county)}`);
+    const historical = await res.json();
+    if (!historical.length) return;
+
+    document.getElementById('trendCountyLabel').textContent = county;
+    document.getElementById('trendBox').classList.add('show');
+
+    // Prepare labels (historical dates + future date)
+    const historicalLabels = historical.map(d => d.date);
+    const targetDateObj = new Date(targetDate);
+    const targetLabel = targetDateObj.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    
+    const labels = [...historicalLabels, targetLabel];
+    const prices = historical.map(d => d.price);
+    
+    // Add null for historical points, then predicted at the end
+    const futurePrices = [...Array(prices.length).fill(null), predictedPrice];
+
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(document.getElementById('trendChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Historical Weekly Avg (KSh)',
+                    data: [...prices, null],
+                    borderColor: '#2e8b57',
+                    backgroundColor: 'rgba(46,139,87,0.07)',
+                    fill: true, tension: 0.4, pointRadius: 0,
+                },
+                {
+                    label: 'Price Prediction',
+                    data: futurePrices,
+                    borderColor: '#f0a500',
+                    backgroundColor: 'rgba(240,165,0,0.15)',
+                    pointRadius: 8, pointBackgroundColor: '#f0a500',
+                    pointBorderColor: '#fff', pointBorderWidth: 2,
+                    borderDash: [6,4],
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                y: { title: { display: true, text: 'Price (KSh/kg)' } },
+                x: { ticks: { maxTicksLimit: 10 } }
+            }
+        }
+    });
+}
+
+function showError(msg) {
+    const el = document.getElementById('formError');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => {
+        el.style.display = 'none';
+    }, 5000);
+}
+
+// Call toggle function on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleFutureOptions();
+});
+</script>
+
+          <button class="pred-btn" id="predictBtn" onclick="runPrediction()">🌽 Predict Price</button>
+          <div class="loading-row" id="loadingRow"><div class="spinner"></div></div>
+          <p style="font-size:0.85rem;color:var(--danger);margin-top:0.75rem;display:none;" id="formError"></p>
+        </div>
+
+        <!-- RESULT BOX -->
+        <div class="result-box" id="resultBox">
+          <div class="result-label">Predicted Wholesale Price</div>
+          <div class="result-price" id="resultPrice">—</div>
+          <div class="result-unit">KSh per kg</div>
+          <div class="result-band" id="resultBand"></div>
+          <div class="result-meta">
+            <span id="metaCounty"></span>
+            <span id="metaClass"></span>
+            <span id="metaDate"></span>
+          </div>
+          <!-- NEW: Show method used -->
+          <div id="methodUsed" class="method-badge" style="display:none;"></div>
+          {% if not session.get('user') %}
+          <p style="margin-top:1rem;font-size:0.8rem;opacity:0.7;">
+            <a href="{{ url_for('register') }}" style="color:var(--gold);">Create an account</a> to save your predictions
+          </p>
+          {% endif %}
+        </div>
+
+        <!-- PRICE TREND CHART (loads after prediction) -->
+        <div class="trend-box" id="trendBox">
+          <h3 style="font-family:var(--font-head);font-weight:700;color:var(--green-900);margin-bottom:1rem;">
+            📊 Historical Price Trend — <span id="trendCountyLabel"></span>
+          </h3>
+          <canvas id="trendChart"></canvas>
+          <p style="font-size:0.78rem;color:var(--gray-400);margin-top:0.75rem;">Weekly average wholesale price · 2023–2026</p>
+        </div>
+      </div>
+
+      <!-- RIGHT: TIPS -->
+      <div>
+        <div class="tips-box">
+          <h3>📘 How to Use This Tool</h3>
+          <div class="tip"><span class="tip-icon">💰</span><span><strong>Don't know wholesale price?</strong> Toggle to "I know my retail price" — we'll estimate the wholesale price for you.</span></div>
+          <div class="tip"><span class="tip-icon">🔍</span><span><strong>Leave any field empty</strong> and check "Auto-fill" — we'll use historical data from your county.</span></div>
+          <div class="tip"><span class="tip-icon">📍</span><span>Select your <strong>county</strong> — prices vary significantly between regions like Trans-Nzoia (surplus) and Nairobi (deficit).</span></div>
+          <div class="tip"><span class="tip-icon">📦</span><span>Enter the <strong>supply volume</strong> available in your market. High supply typically means lower prices.</span></div>
+          <div class="tip"><span class="tip-icon">🌡</span><span>Use the current <strong>temperature and rainfall</strong> from your local weather app or Kenya Meteorological Department.</span></div>
+          <div class="tip"><span class="tip-icon">📊</span><span>The result shows a <strong>confidence range ±8%</strong> — plan buying/selling within this band.</span></div>
+        </div>
+
+        <div class="tips-box">
+          <h3>🗓 Kenya Maize Price Calendar</h3>
+          <div class="tip"><span class="tip-icon">🌱</span><span><strong>Mar–May (Long Rains):</strong> Planting season. Prices usually high due to low stocks from previous year.</span></div>
+          <div class="tip"><span class="tip-icon">🌾</span><span><strong>Jul–Aug (Harvest):</strong> Prices drop as new maize enters market — good time to buy.</span></div>
+          <div class="tip"><span class="tip-icon">🌧</span><span><strong>Oct–Dec (Short Rains):</strong> Second planting. Prices moderate and stabilising.</span></div>
+          <div class="tip"><span class="tip-icon">📈</span><span><strong>Jan–Feb (Lean Season):</strong> Stocks running low — prices tend to rise. Good time to sell stored maize.</span></div>
+        </div>
+
+        <!-- COUNTY QUICK COMPARISON -->
+        <div class="tips-box" id="countyStatsBox" style="display:none;">
+          <h3>📍 <span id="statsCountyName"></span> — Quick Stats</h3>
+          <div id="countyStatsContent" style="font-size:0.875rem;color:var(--gray-600);line-height:2;"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  
+function toggleDatePicker() {
+    const predType = document.getElementById('prediction_type').value;
+    const customGroup = document.getElementById('custom_date_group');
+    customGroup.style.display = predType === 'custom' ? 'block' : 'none';
+}
+
+function runPrediction() {
+    const payload = {
+        // ... existing fields ...
+        prediction_type: document.getElementById('prediction_type').value,
+        target_date: document.getElementById('custom_date').value
+    };
+    // ... rest of function
+}
+
+let trendChart = null;
+let currentPriceType = 'wholesale';  // 'wholesale' or 'retail'
+
+function setPriceType(type) {
+  currentPriceType = type;
+  const wholesaleGroup = document.getElementById('wholesaleGroup');
+  const retailGroup = document.getElementById('retailGroup');
+  const wholesaleBtn = document.getElementById('priceTypeWholesale');
+  const retailBtn = document.getElementById('priceTypeRetail');
+  
+  if (type === 'wholesale') {
+    wholesaleGroup.style.display = 'block';
+    retailGroup.style.display = 'none';
+    wholesaleBtn.classList.add('active');
+    retailBtn.classList.remove('active');
+  } else {
+    wholesaleGroup.style.display = 'none';
+    retailGroup.style.display = 'block';
+    wholesaleBtn.classList.remove('active');
+    retailBtn.classList.add('active');
+  }
+}
+
+async function onCountyChange() {
+  const county = document.getElementById('county').value;
+  if (!county) return;
+  
+  // Load quick county stats
+  const res  = await fetch(`/api/price-trend?county=${encodeURIComponent(county)}`);
+  const data = await res.json();
+  if (data.length) {
+    const prices = data.map(d => d.price);
+    const avg    = (prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2);
+    const min    = Math.min(...prices).toFixed(2);
+    const max    = Math.max(...prices).toFixed(2);
+    document.getElementById('statsCountyName').textContent = county;
+    document.getElementById('countyStatsContent').innerHTML =
+      `Average wholesale price: <strong>KSh ${avg}</strong><br>` +
+      `Lowest recorded: <strong>KSh ${min}</strong><br>` +
+      `Highest recorded: <strong>KSh ${max}</strong><br>` +
+      `Data points: <strong>${data.length} weeks</strong>`;
+    document.getElementById('countyStatsBox').style.display = 'block';
+  }
+  
+  // Auto-fill price lags from historical data if available
+  if (document.getElementById('useHistoricalFallback').checked) {
+    await autoFillPriceLags(county);
+  }
+}
+
+async function autoFillPriceLags(county) {
+  try {
+    const res = await fetch(`/api/price-trend?county=${encodeURIComponent(county)}`);
+    const data = await res.json();
+    if (data.length >= 4) {
+      // Get recent prices (last 4 weeks)
+      const recentPrices = data.slice(-4).map(d => d.price);
+      if (recentPrices.length >= 3) {
+        document.getElementById('price_lag_7d').value = recentPrices[recentPrices.length - 2] || '';
+        document.getElementById('price_lag_14d').value = recentPrices[recentPrices.length - 3] || '';
+        document.getElementById('price_lag_30d').value = recentPrices[0] || '';
+      }
+    }
+  } catch(e) {
+    console.log("Could not auto-fill price lags:", e);
+  }
+}
+
+async function runPrediction() {
+  const county = document.getElementById('county').value;
+  if (!county) { showError('Please select a county'); return; }
+
+  const btn    = document.getElementById('predictBtn');
+  const loader = document.getElementById('loadingRow');
+  btn.disabled = true;
+  loader.style.display = 'flex';
+  document.getElementById('formError').style.display = 'none';
+  document.getElementById('resultBox').classList.remove('show');
+  document.getElementById('trendBox').classList.remove('show');
+
+  // Build payload
+  let payload = {
+    county,
+    classification : document.getElementById('classification').value,
+    supply_volume  : parseFloat(document.getElementById('supply_volume').value) || 5000,
+    temperature    : parseFloat(document.getElementById('temperature').value) || 19,
+    rainfall       : parseFloat(document.getElementById('rainfall').value) || 0,
+    price_type     : currentPriceType,
+    use_historical_fallback : document.getElementById('useHistoricalFallback').checked
+  };
+
+  // Add price based on type
+  if (currentPriceType === 'wholesale') {
+    const wholesale = document.getElementById('wholesale_price').value;
+    if (wholesale) payload.wholesale_price = parseFloat(wholesale);
+  } else {
+    const retail = document.getElementById('retail_price').value;
+    if (retail) payload.retail_price = parseFloat(retail);
+  }
+
+  // Add optional price lags (only if user provided them)
+  const lag7d = document.getElementById('price_lag_7d').value;
+  const lag14d = document.getElementById('price_lag_14d').value;
+  const lag30d = document.getElementById('price_lag_30d').value;
+  
+  if (lag7d) payload.price_lag_7d = parseFloat(lag7d);
+  if (lag14d) payload.price_lag_14d = parseFloat(lag14d);
+  if (lag30d) payload.price_lag_30d = parseFloat(lag30d);
+
+  try {
+    const res  = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      document.getElementById('resultPrice').textContent = 'KSh ' + data.predicted_price.toFixed(2);
+      document.getElementById('resultBand').textContent  =
+        `Confidence range: KSh ${data.confidence_low} – KSh ${data.confidence_high} per kg`;
+      document.getElementById('metaCounty').textContent = '📍 ' + data.county;
+      document.getElementById('metaClass').textContent  = '🌽 ' + data.classification;
+      document.getElementById('metaDate').textContent   = '📅 ' + data.date;
+      
+      // Show method used
+      const methodEl = document.getElementById('methodUsed');
+      if (data.method_used) {
+        let methodText = '';
+        if (data.method_used === 'wholesale_input') methodText = '📊 Based on your wholesale price';
+        else if (data.method_used === 'retail_input') methodText = '🛒 Estimated from your retail price';
+        methodEl.textContent = methodText;
+        methodEl.style.display = 'inline-block';
+      }
+      
+      document.getElementById('resultBox').classList.add('show');
+      
+      // Show wholesale used info if available
+      if (data.wholesale_used) {
+        const metaDiv = document.querySelector('.result-meta');
+        const wholesaleInfo = document.createElement('small');
+        wholesaleInfo.style.display = 'block';
+        wholesaleInfo.style.fontSize = '0.7rem';
+        wholesaleInfo.style.opacity = '0.7';
+        wholesaleInfo.innerHTML = `💰 Wholesale used: KSh ${data.wholesale_used}`;
+        if (!document.getElementById('wholesaleInfo')) {
+          wholesaleInfo.id = 'wholesaleInfo';
+          metaDiv.appendChild(wholesaleInfo);
+        } else {
+          document.getElementById('wholesaleInfo').innerHTML = `💰 Wholesale used: KSh ${data.wholesale_used}`;
+        }
+      }
+
+      // Load trend chart
+      await loadTrendChart(county, data.predicted_price);
+    } else {
+      showError(data.error || 'Prediction failed. Please try again.');
+    }
+  } catch(e) {
+    showError('Network error. Please check your connection.');
+  } finally {
+    btn.disabled = false;
+    loader.style.display = 'none';
+  }
+}
+
+async function loadTrendChart(county, predictedPrice) {
+  const res  = await fetch(`/api/price-trend?county=${encodeURIComponent(county)}`);
+  const data = await res.json();
+  if (!data.length) return;
+
+  document.getElementById('trendCountyLabel').textContent = county;
+  document.getElementById('trendBox').classList.add('show');
+
+  const labels = data.map(d => d.date);
+  const prices = data.map(d => d.price);
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: [...labels, 'Predicted →'],
+      datasets: [
+        {
+          label: 'Historical Weekly Avg (KSh)',
+          data: [...prices, null],
+          borderColor: '#2e8b57',
+          backgroundColor: 'rgba(46,139,87,0.07)',
+          fill: true, tension: 0.4, pointRadius: 0,
+        },
+        {
+          label: 'Your Prediction (KSh)',
+          data: [...Array(prices.length).fill(null), predictedPrice],
+          borderColor: '#f0a500',
+          backgroundColor: 'rgba(240,165,0,0.15)',
+          pointRadius: 8, pointBackgroundColor: '#f0a500',
+          pointBorderColor: '#fff', pointBorderWidth: 2,
+          borderDash: [6,4],
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode:'index', intersect:false },
+      plugins: { legend:{ position:'top' } },
+      scales: {
+        y: { title:{ display:true, text:'Price (KSh/kg)' } },
+        x: { ticks:{ maxTicksLimit:10 } }
+      }
+    }
+  });
+}
+
+function showError(msg) {
+  const el = document.getElementById('formError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+</script>
+{% endblock %}

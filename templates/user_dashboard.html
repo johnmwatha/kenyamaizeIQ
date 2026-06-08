@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}My Dashboard — MaizeIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.dash-grid { display:grid; grid-template-columns:2fr 1fr; gap:1.5rem; align-items:start; }
+.quick-actions { display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1.75rem; }
+.action-card {
+  flex:1; min-width:140px; background:#fff; border-radius:14px; padding:1.25rem 1rem;
+  text-align:center; text-decoration:none; box-shadow:var(--shadow);
+  border:1.5px solid var(--gray-200); transition:all 0.2s; color:var(--gray-800);
+}
+.action-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-md); border-color:var(--green-400); }
+.action-card .icon { font-size:1.75rem; display:block; margin-bottom:0.4rem; }
+.action-card span { font-size:0.82rem; font-weight:600; color:var(--green-900); }
+.price-tag { display:inline-block; background:var(--green-50); color:var(--green-800); border:1px solid var(--green-200); border-radius:20px; padding:0.15rem 0.7rem; font-size:0.78rem; font-weight:700; }
+@media(max-width:900px){ .dash-grid{grid-template-columns:1fr;} }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dash-header">
+  <div class="dash-header-inner" style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+    <div style="width:52px;height:52px;border-radius:50%;background:var(--gold);color:var(--green-900);display:flex;align-items:center;justify-content:center;font-family:var(--font-head);font-size:1.4rem;font-weight:800;flex-shrink:0;">
+      {{ user.name[0].upper() }}
+    </div>
+    <div>
+      <h1>Welcome back, {{ user.name.split()[0] }} 👋</h1>
+      <p>{% if user.county %}📍 {{ user.county }} · {% endif %}Farmer / Trader Account</p>
+    </div>
+  </div>
+</div>
+
+<div class="dash-body">
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid" style="margin-bottom:1.75rem;">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Predictions</div>
+      <div class="kpi-val">{{ predictions|length }}</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Latest Prediction</div>
+      <div class="kpi-val" style="font-size:1.4rem;">
+        {% if predictions %}KSh {{ "%.2f"|format(predictions[0]['predicted_price']) }}{% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Average Predicted Price</div>
+      <div class="kpi-val" style="font-size:1.4rem;">
+        {% if predictions %}
+          KSh {{ "%.2f"|format(predictions | map(attribute='predicted_price') | list | sum / predictions|length) }}
+        {% else %}—{% endif %}
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Your County</div>
+      <div class="kpi-val" style="font-size:1rem;padding-top:0.4rem;">{{ user.county or 'Not set' }}</div>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div class="quick-actions">
+    <a href="{{ url_for('prediction') }}" class="action-card">
+      <span class="icon">🌽</span><span>New Prediction</span>
+    </a>
+    <a href="{{ url_for('historical') }}" class="action-card">
+      <span class="icon">📊</span><span>Historical Data</span>
+    </a>
+    <a href="{{ url_for('prediction') }}#compare" class="action-card">
+      <span class="icon">⚖</span><span>Compare Counties</span>
+    </a>
+    <a href="{{ url_for('profile') }}" class="action-card">
+      <span class="icon">👤</span><span>My Profile</span>
+    </a>
+  </div>
+
+  <div class="dash-grid">
+    <!-- LEFT: chart + table -->
+    <div>
+      {% if predictions|length >= 2 %}
+      <!-- PREDICTION HISTORY CHART -->
+      <div class="chart-box" style="margin-bottom:1.5rem;">
+        <h3>📈 My Prediction History</h3>
+        <canvas id="myPredChart"></canvas>
+      </div>
+      {% endif %}
+
+      <!-- PREDICTIONS TABLE -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>Recent Predictions</h2>
+          {% if predictions %}
+          <a href="/api/predictions/download" class="btn-download">⬇ Export CSV</a>
+          {% endif %}
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>County</th><th>Type</th>
+                <th>Predicted (KSh)</th><th>Rainfall</th><th>Temp</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if predictions %}
+                {% for p in predictions %}
+                <tr>
+                  <td>{{ p['prediction_date'] }}</td>
+                  <td><span class="badge badge-green">{{ p['county'] }}</span></td>
+                  <td>{{ p['classification'] }}</td>
+                  <td><strong>{{ "%.2f"|format(p['predicted_price']) }}</strong></td>
+                  <td>{{ p['rainfall'] }} mm</td>
+                  <td>{{ p['temperature'] }}°C</td>
+                  <td>
+                    <button onclick="printReport('{{ p['county'] }}','{{ p['classification'] }}','{{ "%.2f"|format(p['predicted_price']) }}','{{ p['prediction_date'] }}')"
+                      style="background:none;border:1px solid var(--gray-200);border-radius:5px;padding:0.25rem 0.5rem;cursor:pointer;font-size:0.75rem;color:var(--gray-600);">
+                      🖨 Print
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="7" class="empty-state">
+                    No predictions yet. <a href="{{ url_for('prediction') }}" style="color:var(--green-700);">Make your first prediction →</a>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: tips + county info -->
+    <div>
+      <!-- SEASON ADVISORY -->
+      <div class="card" style="margin-bottom:1.25rem;border-left:4px solid var(--green-600);">
+        <div class="card-icon">🗓</div>
+        <h3>Current Season Advisory</h3>
+        <div id="seasonAdvisory" style="font-size:0.875rem;color:var(--gray-600);line-height:1.7;margin-top:0.5rem;">
+          Loading...
+        </div>
+      </div>
+
+      <!-- COUNTY QUICK STATS -->
+      {% if user.county %}
+      <div class="chart-box">
+        <h3>📍 {{ user.county }} — Recent Prices</h3>
+        <canvas id="countyMiniChart"></canvas>
+        <div id="countyStats" style="margin-top:0.75rem;font-size:0.8rem;color:var(--gray-600);"></div>
+      </div>
+      {% endif %}
+
+      <!-- PRICE TIPS -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-icon">💡</div>
+        <h3>Smart Trading Tips</h3>
+        <ul style="font-size:0.875rem;color:var(--gray-600);line-height:2;padding-left:1.1rem;margin-top:0.5rem;">
+          <li>Sell in <strong>Jan–Feb</strong> when stocks run low</li>
+          <li>Buy in <strong>Jul–Aug</strong> at harvest time</li>
+          <li>Check Trans-Nzoia prices — it sets the national benchmark</li>
+          <li>High rainfall 4–6 weeks ago = lower prices ahead</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- PRINT REPORT MODAL (hidden) -->
+<div id="printArea" style="display:none;">
+  <div id="printContent"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Season advisory ──────────────────────────────────────────────
+const month = new Date().getMonth() + 1;
+const advisories = {
+  1:  { icon:'📈', text:'Lean season — stocks are low, prices are rising. Good time to sell stored maize.' },
+  2:  { icon:'📈', text:'Lean season — demand outpaces supply. Prices near annual high.' },
+  3:  { icon:'🌱', text:'Long rains planting begins. Prices typically start high this month.' },
+  4:  { icon:'🌧', text:'Long rains. Planting season. Prices still elevated — hold off buying if possible.' },
+  5:  { icon:'🌧', text:'Late long rains. Prices should begin stabilising toward mid-year.' },
+  6:  { icon:'⬇', text:'Dry mid-year. New crop approaching — a good time to position for buying.' },
+  7:  { icon:'🌾', text:'Main harvest season! Prices at annual low. Best time to buy and store maize.' },
+  8:  { icon:'🌾', text:'Harvest continues. Prices still low — take advantage before they rise.' },
+  9:  { icon:'📦', text:'Post-harvest. Stock up now before short-rains planting drives prices up.' },
+  10: { icon:'🌦', text:'Short rains planting. Demand rising. Prices beginning to move upward.' },
+  11: { icon:'🌦', text:'Short rains continue. Moderate prices — watch weekly market reports.' },
+  12: { icon:'📊', text:'Year-end. Prices stabilising ahead of lean season in January.' },
+};
+const adv = advisories[month];
+document.getElementById('seasonAdvisory').innerHTML = `<strong style="font-size:1.2rem;">${adv.icon}</strong> ${adv.text}`;
+
+// ── My prediction history chart ──────────────────────────────────
+{% if predictions|length >= 2 %}
+const myPreds = [
+  {% for p in predictions|reverse %}
+  { date:"{{ p['prediction_date'] }}", price:{{ "%.2f"|format(p['predicted_price']) }}, county:"{{ p['county'] }}" },
+  {% endfor %}
+];
+new Chart(document.getElementById('myPredChart'), {
+  type:'line',
+  data:{
+    labels: myPreds.map(d=>d.date),
+    datasets:[{
+      label:'My Predicted Prices (KSh)',
+      data: myPreds.map(d=>d.price),
+      borderColor:'#2e8b57', backgroundColor:'rgba(46,139,87,0.08)',
+      fill:true, tension:0.4, pointRadius:5,
+      pointBackgroundColor:'#2e8b57', pointBorderColor:'#fff', pointBorderWidth:2,
+    }]
+  },
+  options:{
+    responsive:true,
+    plugins:{ legend:{ display:false } },
+    scales:{
+      y:{ title:{ display:true, text:'KSh/kg' } },
+      x:{ ticks:{ maxTicksLimit:8 } }
+    }
+  }
+});
+{% endif %}
+
+// ── County mini chart ────────────────────────────────────────────
+{% if user.county %}
+(async () => {
+  const res  = await fetch('/api/price-trend?county={{ user.county }}');
+  const data = await res.json();
+  if (!data.length) return;
+  const recent = data.slice(-16);
+  const prices = recent.map(d=>d.price);
+  const avg    = (prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2);
+  const min    = Math.min(...prices).toFixed(2);
+  const max    = Math.max(...prices).toFixed(2);
+
+  document.getElementById('countyStats').innerHTML =
+    `Avg: <strong>KSh ${avg}</strong> · Low: KSh ${min} · High: KSh ${max} (last 4 months)`;
+
+  new Chart(document.getElementById('countyMiniChart'), {
+    type:'bar',
+    data:{
+      labels: recent.map(d=>d.date.slice(5)),
+      datasets:[{
+        data: prices,
+        backgroundColor: prices.map(p => p <= parseFloat(avg) ? '#4db87a' : '#f0a500'),
+        borderRadius:4,
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{ legend:{display:false} },
+      scales:{ y:{ title:{display:true,text:'KSh/kg'} }, x:{ ticks:{maxTicksLimit:8} } }
+    }
+  });
+})();
+{% endif %}
+
+// ── Print report ─────────────────────────────────────────────────
+function printReport(county, type, price, dt) {
+  const low   = (price * 0.92).toFixed(2);
+  const high  = (price * 1.08).toFixed(2);
+  const today = new Date().toLocaleDateString('en-KE', {dateStyle:'full'});
+  const html  = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:2rem;">
+      <div style="background:#0d3320;color:#f5c842;padding:1.25rem 1.5rem;border-radius:10px;margin-bottom:1.5rem;">
+        <h1 style="margin:0;font-size:1.5rem;">🌽 MaizeIQ Kenya</h1>
+        <p style="margin:0.3rem 0 0;opacity:0.8;font-size:0.85rem;">Maize Price Prediction Report</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+        <tr style="background:#edf7f1;">
+          <td style="padding:0.65rem 1rem;font-weight:bold;color:#0d3320;">County</td>
+          <td style="padding:0.65rem 1rem;">${county}</td>
+        </tr>
+        <tr>
+          <td style="padding:0.65rem 1rem;font-weight:bold;color:#0d3320;">Maize Type</td>
+          <td style="padding:0.65rem 1rem;">${type}</td>
+        </tr>
+        <tr style="background:#edf7f1;">
+          <td style="padding:0.65rem 1rem;font-weight:bold;color:#0d3320;">Predicted Price</td>
+          <td style="padding:0.65rem 1rem;font-size:1.3rem;font-weight:bold;color:#2e8b57;">KSh ${price} per kg</td>
+        </tr>
+        <tr>
+          <td style="padding:0.65rem 1rem;font-weight:bold;color:#0d3320;">Confidence Range</td>
+          <td style="padding:0.65rem 1rem;">KSh ${low} — KSh ${high}</td>
+        </tr>
+        <tr style="background:#edf7f1;">
+          <td style="padding:0.65rem 1rem;font-weight:bold;color:#0d3320;">Prediction Date</td>
+          <td style="padding:0.65rem 1rem;">${dt}</td>
+        </tr>
+        <tr>
+          <td style="padding:0.65rem 1rem;font-weight:bold;color:#0d3320;">Printed On</td>
+          <td style="padding:0.65rem 1rem;">${today}</td>
+        </tr>
+      </table>
+      <div style="margin-top:1.5rem;padding:1rem;background:#fff8e1;border-radius:8px;border:1px solid #f0a500;font-size:0.82rem;color:#5a3e00;">
+        ⚠️ This prediction is AI-generated and should be used as a guide only. Actual market prices may vary. Always verify with your local market before making large transactions.
+      </div>
+      <p style="text-align:center;color:#9ba3af;font-size:0.75rem;margin-top:1.5rem;">
+        Generated by MaizeIQ Kenya · maizeiq.co.ke
+      </p>
+    </div>`;
+
+  const w = window.open('', '_blank', 'width=700,height=600');
+  w.document.write(`<html><head><title>MaizeIQ Report</title></head><body>${html}</body></html>`);
+  w.document.close();
+  w.print();
+}
+</script>
+{% endblock %}
